@@ -1,0 +1,10 @@
+pyproject.toml
+setup.py
+Qmini/__init__.py
+Qmini/ui_extension_example.py
+Qmini.egg-info/PKG-INFO
+Qmini.egg-info/SOURCES.txt
+Qmini.egg-info/dependency_links.txt
+Qmini.egg-info/not-zip-safe
+Qmini.egg-info/requires.txt
+Qmini.egg-info/top_level.txt
