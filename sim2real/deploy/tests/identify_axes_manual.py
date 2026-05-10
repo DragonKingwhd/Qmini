@@ -1,14 +1,16 @@
 """Manual joint-axis identification.
 
-You move the joints by hand; this script just logs.
+You move the joint by hand; the script reads motor position to confirm
+movement; you answer which axis you saw the leg rotate around.
 
 Workflow:
     1. 机器人吊起来（脚不触地）
-    2. 脚本会先把 4 个未知电机切到 0 力矩模式（你应该能轻松扳动）
-    3. 脚本依次提示一个电机:
-         "请来回扳动 [位置描述]，按 Enter 开始记录 5 秒"
-       你按 Enter，然后用手把那个关节**来回小幅摆 2-3 次**（5 秒内），让对应的腿明显地动
-    4. 全部 4 个测完后，脚本自动分析每个电机绕哪个轴，并打印总结
+    2. 脚本把 4 个未知电机切到 0 力矩（你能用手轻松扳动）
+    3. 依次对每个电机：
+       - 你按 Enter 后，用手把那个关节朝**单一方向**扳到底再扳回来
+       - 脚本看 q 变化方向（确认电机有动）
+       - 让你回答：腿绕哪个轴转的（yaw/roll/pitch）
+    4. 打印每个电机的 (轴, 方向) 映射
 
 Run:
     cd ~/Desktop/Qmini
@@ -17,14 +19,10 @@ Run:
 
 from __future__ import annotations
 
-import math
-import struct
 import sys
 import time
-from dataclasses import dataclass, field
-from typing import List, Tuple
-
-import numpy as np
+from dataclasses import dataclass
+from typing import List
 
 # ---------- unitree SDK ----------
 _SDK_LIB = "/home/pi/unitree_actuator_sdk/lib"
@@ -40,30 +38,15 @@ from unitree_actuator_sdk import (  # type: ignore  # noqa: E402
     queryMotorMode,
 )
 
-# ---------- I2C / IMU ----------
-try:
-    from smbus2 import SMBus  # type: ignore
-except ImportError:
-    from smbus import SMBus   # type: ignore
-
-I2C_BUS = 1
-MPU_ADDR = 0x68
-MPU_PWR_MGMT_1 = 0x6B
-MPU_GYRO_CONFIG = 0x1B
-MPU_ACCEL_CONFIG = 0x1C
-MPU_SMPLRT_DIV = 0x19
-MPU_CONFIG = 0x1A
-MPU_ACCEL_XOUT_H = 0x3B
-GYRO_SCALE = 131.0  # ±250 dps -> deg/s
-
 MOTOR_TYPE = MotorType.GO_M8010_6
 
-# ---------- targets ----------
+
 @dataclass
 class Target:
     port: str
     motor_id: int
     label: str
+
 
 TARGETS: List[Target] = [
     Target("/dev/ttyUSB1", 0, "右髋 (USB1 ID0)"),
@@ -73,40 +56,15 @@ TARGETS: List[Target] = [
 ]
 
 RECORD_S = 5.0
-SAMPLE_HZ = 100.0
+MOVE_THRESHOLD_RAD = 0.3  # motor-side; 0.3 rad ≈ 2.7° joint, easy to clear by hand
 
 
-# ---------- helpers ----------
-def init_mpu(bus: SMBus) -> None:
-    bus.write_byte_data(MPU_ADDR, MPU_PWR_MGMT_1, 0x00)
-    time.sleep(0.05)
-    bus.write_byte_data(MPU_ADDR, MPU_PWR_MGMT_1, 0x01)
-    bus.write_byte_data(MPU_ADDR, MPU_SMPLRT_DIV, 0x00)
-    bus.write_byte_data(MPU_ADDR, MPU_CONFIG, 0x03)
-    bus.write_byte_data(MPU_ADDR, MPU_GYRO_CONFIG, 0x00)
-    bus.write_byte_data(MPU_ADDR, MPU_ACCEL_CONFIG, 0x00)
-    time.sleep(0.05)
-
-
-def _i16(hi: int, lo: int) -> int:
-    v = (hi << 8) | lo
-    return v - 65536 if v & 0x8000 else v
-
-
-def read_gyro(bus: SMBus) -> Tuple[float, float, float]:
-    d = bus.read_i2c_block_data(MPU_ADDR, MPU_ACCEL_XOUT_H, 14)
-    gx = _i16(d[8], d[9]) / GYRO_SCALE
-    gy = _i16(d[10], d[11]) / GYRO_SCALE
-    gz = _i16(d[12], d[13]) / GYRO_SCALE
-    return gx, gy, gz
-
-
-def free_motor(serial: SerialPort, motor_id: int, q_hold: float = 0.0) -> MotorData:
+def free_motor(serial: SerialPort, motor_id: int) -> MotorData:
     cmd = MotorCmd()
     cmd.motorType = MOTOR_TYPE
     cmd.mode = queryMotorMode(MOTOR_TYPE, MotorMode.FOC)
     cmd.id = motor_id
-    cmd.q = q_hold
+    cmd.q = 0.0
     cmd.dq = 0.0
     cmd.tau = 0.0
     cmd.kp = 0.0
@@ -117,173 +75,136 @@ def free_motor(serial: SerialPort, motor_id: int, q_hold: float = 0.0) -> MotorD
     return data
 
 
-def read_q(serial: SerialPort, motor_id: int) -> float:
-    data = free_motor(serial, motor_id)
-    return float(data.q)
-
-
-# ---------- data ----------
-@dataclass
-class Recording:
-    target: Target
-    t: List[float] = field(default_factory=list)
-    motor_q: List[float] = field(default_factory=list)
-    gyro_x: List[float] = field(default_factory=list)
-    gyro_y: List[float] = field(default_factory=list)
-    gyro_z: List[float] = field(default_factory=list)
-
-
-def record_one(serial: SerialPort, bus: SMBus, target: Target,
-               duration: float, hz: float) -> Recording:
-    rec = Recording(target=target)
-    dt = 1.0 / hz
+def record_motor(serial: SerialPort, motor_id: int, duration_s: float):
+    """Free + log q for `duration_s` seconds. Returns (q_min, q_max, q_start, q_end, n_ok)."""
     t0 = time.perf_counter()
-    while True:
-        t = time.perf_counter() - t0
-        if t >= duration:
-            break
+    qs = []
+    while time.perf_counter() - t0 < duration_s:
         try:
-            q = read_q(serial, target.motor_id)
+            data = free_motor(serial, motor_id)
+            qs.append(float(data.q))
         except Exception:
-            q = float("nan")
-        try:
-            gx, gy, gz = read_gyro(bus)
-        except Exception:
-            gx = gy = gz = float("nan")
-        rec.t.append(t)
-        rec.motor_q.append(q)
-        rec.gyro_x.append(gx)
-        rec.gyro_y.append(gy)
-        rec.gyro_z.append(gz)
-        # pace the loop
-        elapsed = time.perf_counter() - t0 - t
-        sleep_s = dt - elapsed
-        if sleep_s > 0:
-            time.sleep(sleep_s)
-    return rec
-
-
-# ---------- analysis ----------
-def _ptp(arr: List[float]) -> float:
-    a = np.asarray(arr, dtype=np.float64)
-    a = a[~np.isnan(a)]
-    return float(np.ptp(a)) if a.size else 0.0
-
-
-def _correlation(motor_q: List[float], gyro_axis: List[float]) -> float:
-    """correlation of gyro axis with motor_dq (numerical derivative of q)."""
-    q = np.asarray(motor_q, dtype=np.float64)
-    g = np.asarray(gyro_axis, dtype=np.float64)
-    mask = ~(np.isnan(q) | np.isnan(g))
-    q = q[mask]; g = g[mask]
-    if q.size < 4:
-        return 0.0
-    dq = np.diff(q)
-    g_mid = (g[:-1] + g[1:]) / 2.0
-    if dq.std() < 1e-6 or g_mid.std() < 1e-6:
-        return 0.0
-    return float(np.corrcoef(dq, g_mid)[0, 1])
-
-
-def analyze(rec: Recording) -> dict:
-    motion_rad = _ptp(rec.motor_q)
-    ptp = {
-        "x": _ptp(rec.gyro_x),
-        "y": _ptp(rec.gyro_y),
-        "z": _ptp(rec.gyro_z),
-    }
-    corr = {
-        "x": _correlation(rec.motor_q, rec.gyro_x),
-        "y": _correlation(rec.motor_q, rec.gyro_y),
-        "z": _correlation(rec.motor_q, rec.gyro_z),
-    }
-    # axis with strongest |corr| wins
-    axis = max(corr, key=lambda k: abs(corr[k]))
-    axis_name = {"x": "roll", "y": "pitch", "z": "yaw"}[axis]
-    sign = "正" if corr[axis] > 0 else "反"
+            pass
+        time.sleep(0.02)  # ~50 Hz
+    if not qs:
+        return None
     return {
-        "motion_rad": motion_rad,
-        "ptp": ptp,
-        "corr": corr,
-        "axis": axis,
-        "axis_name": axis_name,
-        "sign": sign,
+        "q_start": qs[0],
+        "q_end": qs[-1],
+        "q_min": min(qs),
+        "q_max": max(qs),
+        "n": len(qs),
     }
 
 
-# ---------- main ----------
+def ask_axis() -> str:
+    print("    请回答：你看到这条腿绕哪个轴转动？")
+    print("      y) yaw   — 水平面内转（八字开合 / 内外旋）")
+    print("      r) roll  — 前额面侧倾（向身体外/内倒）")
+    print("      p) pitch — 前后摆（前踢/后摆）")
+    print("      s) 没看清 / 重测这个")
+    while True:
+        ans = input("    输入 y/r/p/s: ").strip().lower()
+        if ans in ("y", "r", "p", "s"):
+            return ans
+
+
+def ask_sign() -> str:
+    """Direction convention question."""
+    print("    电机 q 增加（你扳的方向是 q 上升）时，关节往哪一边？")
+    print("      + ) 与训练侧约定一致（例如左髋外旋为正）")
+    print("      - ) 相反（驱动里要乘 -1）")
+    print("      ? ) 现在判断不了，先记 +，部署时再校")
+    while True:
+        ans = input("    输入 + / - / ?: ").strip()
+        if ans in ("+", "-", "?"):
+            return ans
+
+
 def main() -> None:
     print("=" * 64)
     print("  手动关节轴识别")
     print("=" * 64)
-    print("⚠️  确认机器人吊起、脚不触地、所有电机均已上电。")
-    print("流程：脚本依次提示 4 个未知电机，每个你都用手来回扳 2-3 次。")
-    input("\n按 Enter 继续...")
+    print("⚠️  确认机器人吊起、脚不触地、所有电机均已上电（包括 USB1 上的两颗）。")
+    input("按 Enter 继续...")
 
-    # open buses
-    bus_imu = SMBus(I2C_BUS)
-    init_mpu(bus_imu)
-    print("[IMU] OK")
-
-    serials = {}
+    serials: dict = {}
     for tgt in TARGETS:
         if tgt.port not in serials:
             serials[tgt.port] = SerialPort(tgt.port)
             print(f"[{tgt.port}] open")
 
-    # set all targets to free mode
-    print("\n→ 把这 4 个电机切到 0 力矩模式...")
+    print("\n→ 把这 4 个电机切到 0 力矩...")
     for tgt in TARGETS:
         try:
             free_motor(serials[tgt.port], tgt.motor_id)
+            free_motor(serials[tgt.port], tgt.motor_id)  # send twice
         except Exception as e:
             print(f"  [WARN] {tgt.label}: {e}")
-    print("  完成。现在你应该可以用手轻松扳动这 4 个关节。")
-    print("  若某个关节扳不动，按 Ctrl+C 退出，先排查电机状态。\n")
+    print("  完成。请验证：用手扳这 4 个关节，应该都很轻松能动。")
+    print("  若某个扳不动，去断电重启电机后再来。")
 
-    recordings: List[Recording] = []
+    results = []
     for i, tgt in enumerate(TARGETS, 1):
-        print("-" * 64)
+        print("\n" + "-" * 64)
         print(f"[{i}/{len(TARGETS)}]  {tgt.label}")
-        print(f"  请准备好用手 **来回扳动** 这个关节（小幅摆动 2-3 次即可）")
-        input(f"  按 Enter 开始 {RECORD_S:.0f} 秒录制...")
-        print("  🔴 录制中... 现在开始扳动！")
-        rec = record_one(serials[tgt.port], bus_imu, tgt, RECORD_S, SAMPLE_HZ)
-        print("  ✅ 完成")
-        recordings.append(rec)
+        print(f"  操作：用手把这个关节朝**单一方向**扳到边、再扳回来。")
+        print(f"  来回扳 1-2 次即可，5 秒。")
+        while True:
+            input("  按 Enter 开始录制...")
+            print(f"  🔴 录制中 {RECORD_S:.0f} 秒... 现在开始扳！")
+            stats = record_motor(serials[tgt.port], tgt.motor_id, RECORD_S)
+            if stats is None:
+                print("  ❌ 完全读不到电机！跳过。")
+                results.append((tgt, None, None, None))
+                break
+            ptp = stats["q_max"] - stats["q_min"]
+            net = stats["q_end"] - stats["q_start"]
+            print(f"  q 范围: [{stats['q_min']:+.3f}, {stats['q_max']:+.3f}] "
+                  f"(峰峰 {ptp:.3f} rad,  净位移 {net:+.3f} rad)")
+            if ptp < MOVE_THRESHOLD_RAD:
+                print(f"  ⚠️  电机几乎没动 (峰峰 < {MOVE_THRESHOLD_RAD} rad)。")
+                print("     可能：扳得太轻 / 这个电机故障没复位 / 0 力矩没生效")
+                ans = input("     重测? (y/N): ").strip().lower()
+                if ans == "y":
+                    continue
+            axis = ask_axis()
+            if axis == "s":
+                print("    重测这个关节。")
+                continue
+            sign = ask_sign()
+            results.append((tgt, axis, sign, stats))
+            break
 
-    # close
-    bus_imu.close()
-
-    # analyze
+    # summary
     print("\n" + "=" * 64)
     print("  结果总结")
     print("=" * 64)
-    print(f"{'位置':<22} {'motor_Δ(rad)':<14} {'判定轴':<10} {'sign':<6} "
-          f"{'corr_x':>7} {'corr_y':>7} {'corr_z':>7}")
-    summary = []
-    for rec in recordings:
-        a = analyze(rec)
-        summary.append((rec.target, a))
-        print(f"{rec.target.label:<22} {a['motion_rad']:<14.3f} "
-              f"{a['axis_name']:<10} {a['sign']:<6} "
-              f"{a['corr']['x']:>+7.3f} {a['corr']['y']:>+7.3f} {a['corr']['z']:>+7.3f}")
+    axis_full = {"y": "yaw", "r": "roll", "p": "pitch"}
+    print(f"{'位置':<24}{'轴':<8}{'方向':<6}{'峰峰(rad,motor)':<18}")
+    for tgt, axis, sign, stats in results:
+        if axis is None:
+            print(f"{tgt.label:<24}{'?':<8}{'?':<6}{'(failed)':<18}")
+        else:
+            ptp = stats["q_max"] - stats["q_min"]
+            print(f"{tgt.label:<24}{axis_full[axis]:<8}{sign:<6}{ptp:<18.3f}")
 
-    # warn if motor didn't move
-    print()
-    for rec in recordings:
-        a = analyze(rec)
-        if a["motion_rad"] < 0.05:
-            print(f"⚠️  {rec.target.label}: 电机几乎没动 (Δ={a['motion_rad']:.3f}). "
-                  "可能在故障态或扳不动；这次结果不可信。")
-
-    print("\n说明：")
-    print("  axis_name 的含义（IMU 体坐标系，跟训练侧一致）:")
-    print("    roll  → 关节绕 X 轴 (前后) → hip_roll")
-    print("    pitch → 关节绕 Y 轴 (左右) → hip_pitch")
-    print("    yaw   → 关节绕 Z 轴 (竖直) → hip_yaw")
-    print("  sign  = '正' 表示电机q增加方向 与 IMU 同号; '反' 表示反向（驱动里要乘 -1）")
-    print("  仅当 |corr| > 0.5 才比较可信；如果三轴 corr 都很小，说明这次扳动太轻或太快。")
+    # rough joint mapping suggestion
+    print("\n建议的关节名映射（结合左/右 + 轴）:")
+    name_of = {
+        ("左", "yaw"):   "hip_yaw_l",
+        ("左", "roll"):  "hip_roll_l",
+        ("左", "pitch"): "hip_pitch_l",
+        ("右", "yaw"):   "hip_yaw_r",
+        ("右", "roll"):  "hip_roll_r",
+        ("右", "pitch"): "hip_pitch_r",
+    }
+    for tgt, axis, sign, _ in results:
+        if axis is None:
+            continue
+        side = "左" if "左" in tgt.label else ("右" if "右" in tgt.label else "?")
+        joint = name_of.get((side, axis_full[axis]), "?")
+        print(f"  {tgt.port}  ID={tgt.motor_id}  →  {joint}  (sign={sign})")
 
 
 if __name__ == "__main__":
