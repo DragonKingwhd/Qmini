@@ -49,10 +49,10 @@ MOTOR_TYPE = MotorType.GO_M8010_6
 LOOP_HZ = 200.0
 DT = 1.0 / LOOP_HZ
 
-# Tighter grid: stick to (kp ≥ kd) region to avoid the kp<<kd resonance
-# that caused 12x oscillation last run.
-KP_GRID = [0.05, 0.10, 0.20, 0.40, 0.80]
-KD_GRID = [0.05, 0.10, 0.20, 0.50]
+# Fine-grained sweep around the previously-found GOOD region (kp 0.40-0.80).
+# Try to push kp higher to see if tracking improves without triggering OSC.
+KP_GRID = [0.60, 0.80, 1.00, 1.20]
+KD_GRID = [0.05, 0.10, 0.15, 0.20]
 
 
 def _make_cmd(motor_id: int, q: float, dq: float, kp: float, kd: float) -> MotorCmd:

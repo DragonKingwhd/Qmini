@@ -52,24 +52,29 @@ GEAR_RATIO = 6.33
 MOTOR_TYPE = MotorType.GO_M8010_6
 G2 = GEAR_RATIO * GEAR_RATIO
 
-# Joint-side gains from qmini_env_cfg.py (training-time PD).
-# Motor-side gains = joint-side / gear_ratio² because:
-#   τ_motor = kp_m (q_m_des - q_m) - kd_m * dq_m
-#   τ_joint = G * τ_motor,   q_m = G * q_j,  dq_m = G * dq_j
-# ⇒ τ_joint = G² kp_m (q_j_des - q_j) - G² kd_m * dq_j
-JOINT_KP_PREFIX: Dict[str, float] = {
-    "hip_yaw":   55.0,
-    "hip_roll":  105.0,
-    "hip_pitch": 75.0,
-    "knee":      45.0,
-    "ankle":     30.0,
+# Empirically validated motor-side gains for GO-M8010-6 clones (2026-05-10).
+# pid_sweep.py on USB3 ID=1 (knee) showed:
+#   - kd ≥ 0.5 always triggers self-oscillation → over-current fault
+#   - kp ≤ 0.10 with kd ≤ 0.20 is too soft (gear-box stiction wins)
+#   - kp = 0.80, kd = 0.10 tracks ~88% with no faults
+#
+# These are MOTOR-side gains; sim training used joint-side kp 55-105 / kd 0.3-2.5,
+# i.e. expected motor-side ≈ 1.4-2.6 / 0.008-0.06. The clones can't do that
+# without faulting; expect a softer-than-sim feel and rely on the policy's
+# robustness to PD mismatch (it observes actual joint pos in obs).
+KP_MOTOR_PREFIX: Dict[str, float] = {
+    "hip_yaw":   0.80,
+    "hip_roll":  0.80,
+    "hip_pitch": 0.80,
+    "knee":      0.80,
+    "ankle":     0.80,
 }
-JOINT_KD_PREFIX: Dict[str, float] = {
-    "hip_yaw":   0.3,
-    "hip_roll":  2.5,
-    "hip_pitch": 0.3,
-    "knee":      0.5,
-    "ankle":     0.25,
+KD_MOTOR_PREFIX: Dict[str, float] = {
+    "hip_yaw":   0.10,
+    "hip_roll":  0.10,
+    "hip_pitch": 0.10,
+    "knee":      0.10,
+    "ankle":     0.10,
 }
 
 
@@ -116,9 +121,9 @@ class UnitreeJointDriver(JointDriver):
         self._maps: List[MotorMap] = [mapping[n] for n in JOINT_NAMES]
         self._signs = np.array([m.sign for m in self._maps], dtype=np.float32)
         self._zeros = np.array([m.zero_motor_rad for m in self._maps], dtype=np.float32)
-        self._kp = np.array([_gain_for(n, JOINT_KP_PREFIX) / G2 for n in JOINT_NAMES],
+        self._kp = np.array([_gain_for(n, KP_MOTOR_PREFIX) for n in JOINT_NAMES],
                             dtype=np.float32)
-        self._kd = np.array([_gain_for(n, JOINT_KD_PREFIX) / G2 for n in JOINT_NAMES],
+        self._kd = np.array([_gain_for(n, KD_MOTOR_PREFIX) for n in JOINT_NAMES],
                             dtype=np.float32)
         self._max_step = float(max_target_step_rad)
 

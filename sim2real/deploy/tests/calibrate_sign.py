@@ -46,9 +46,9 @@ CONFIG_PATH = REPO_ROOT / "sim2real/config/calibration.yaml"
 
 GEAR_RATIO = 6.33
 MOTOR_TYPE = MotorType.GO_M8010_6
-KP = 0.6   # motor side; conservative — easier on stiction-prone clones
-KD = 0.5
-RAMP_S = 3.0   # very slow ramp to avoid current spikes
+KP = 0.40   # validated by pid_sweep.py: GOOD with no oscillation
+KD = 0.10
+RAMP_S = 2.5
 HOLD_S = 1.5
 LOOP_HZ = 200.0
 
@@ -120,13 +120,18 @@ def send(serial: SerialPort, cmd: MotorCmd) -> Tuple[float, float]:
 
 def ramp_motor(serial: SerialPort, motor_id: int, q_from: float, q_to: float,
                duration_s: float, kp: float, kd: float) -> float:
+    """Ramp with early-abort on oscillation (|err| > 1.5 * |q_to - q_from|)."""
     n = max(1, int(duration_s * LOOP_HZ))
     dt = 1.0 / LOOP_HZ
     last_q = q_from
+    travel = abs(q_to - q_from)
     for i in range(n + 1):
         s = i / n
-        q = q_from + (q_to - q_from) * s
-        last_q, _ = send(serial, _make_cmd(motor_id, q, kp, kd))
+        q_cmd = q_from + (q_to - q_from) * s
+        last_q, _ = send(serial, _make_cmd(motor_id, q_cmd, kp, kd))
+        if travel > 0 and abs(last_q - q_cmd) > 1.5 * travel:
+            print("    ⚠️ 振荡中止 (err > 1.5 * travel)")
+            break
         time.sleep(dt)
     return last_q
 
