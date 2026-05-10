@@ -52,22 +52,23 @@ GEAR_RATIO = 6.33
 MOTOR_TYPE = MotorType.GO_M8010_6
 G2 = GEAR_RATIO * GEAR_RATIO
 
-# Empirically validated motor-side gains for GO-M8010-6 clones (2026-05-10).
-# pid_sweep.py on USB3 ID=1 (knee) showed:
-#   - kd ≥ 0.5 always triggers self-oscillation → over-current fault
-#   - kp ≤ 0.10 with kd ≤ 0.20 is too soft (gear-box stiction wins)
-#   - kp = 0.80, kd = 0.10 tracks ~88% with no faults
+# Empirically validated motor-side gains for GO-M8010-6 (Qmini, 2026-05-10).
+# Two pid_sweep.py runs on USB3 ID=1 (knee) found a stable kp/kd workspace.
+# Best combo: kp=1.20, kd=0.10 → moved=0.375 (94% tracking on a 0.4 rad step),
+# final_err=-0.019 rad (~1° joint side), max_dev=0.067 rad, zero oscillations.
 #
-# These are MOTOR-side gains; sim training used joint-side kp 55-105 / kd 0.3-2.5,
-# i.e. expected motor-side ≈ 1.4-2.6 / 0.008-0.06. The clones can't do that
-# without faulting; expect a softer-than-sim feel and rely on the policy's
-# robustness to PD mismatch (it observes actual joint pos in obs).
+# Kp=1.20 maps to ~48 N·m/rad on the joint side (kp_joint = kp_motor × G²).
+# Sim training used 30–105 N·m/rad; some joints (hip_roll, hip_pitch) will be
+# softer than sim — relying on policy robustness via obs feedback.
+#
+# NEVER set kd ≥ 0.50 on this hardware (every test in that region triggered
+# 5-rad oscillations and current-fault flash).
 KP_MOTOR_PREFIX: Dict[str, float] = {
-    "hip_yaw":   0.80,
-    "hip_roll":  0.80,
-    "hip_pitch": 0.80,
-    "knee":      0.80,
-    "ankle":     0.80,
+    "hip_yaw":   1.20,
+    "hip_roll":  1.20,
+    "hip_pitch": 1.20,
+    "knee":      1.20,
+    "ankle":     1.20,
 }
 KD_MOTOR_PREFIX: Dict[str, float] = {
     "hip_yaw":   0.10,

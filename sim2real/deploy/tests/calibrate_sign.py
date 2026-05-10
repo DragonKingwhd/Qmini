@@ -46,8 +46,8 @@ CONFIG_PATH = REPO_ROOT / "sim2real/config/calibration.yaml"
 
 GEAR_RATIO = 6.33
 MOTOR_TYPE = MotorType.GO_M8010_6
-KP = 0.40   # validated by pid_sweep.py: GOOD with no oscillation
-KD = 0.10
+KP = 0.80   # safe-but-firm; pid_sweep showed kp=0.8/kd=0.1 tracks 81% on knee
+KD = 0.10   # NEVER ≥ 0.5 on this hardware (oscillates → current fault)
 RAMP_S = 2.5
 HOLD_S = 1.5
 LOOP_HZ = 200.0
