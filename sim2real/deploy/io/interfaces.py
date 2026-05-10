@@ -2,8 +2,8 @@
 
 Concrete drivers (real IMU over serial/I2C, real joint actuators over
 CAN/UART) must subclass these and implement the methods. Nothing else in
-the deploy package should import vendor-specific libraries; they all talk
-to hardware through these interfaces.
+the deploy package should import vendor-specific libraries — they all
+talk to hardware through these interfaces.
 """
 
 from __future__ import annotations
@@ -14,21 +14,28 @@ import numpy as np
 
 
 class IMUDriver(ABC):
-    """Onboard IMU mounted on the robot's base.
+    """Onboard IMU on the robot's base.
 
-    Returns angles in radians and angular velocities in rad/s, in the
-    *base body frame*. The training-side observations use roll/pitch from
-    a quaternion and angular velocity in body frame, so the real IMU must
-    be mounted such that its X axis points forward, Y left, Z up — or the
-    driver internally remaps to that convention.
+    Returns observation quantities in the *base body frame*:
+      - linear velocity (m/s, 3-vector)
+      - angular velocity (rad/s, 3-vector)
+      - projected gravity (unit vector, 3-vector)
+
+    On a typical setup you do *not* directly measure body-frame linear
+    velocity from a 6-axis IMU. Two common solutions:
+      1. State estimator (e.g. complementary filter / Kalman with leg odometry)
+         that fuses gyro + accel + foot kinematics into a body-vel estimate.
+      2. Set ``base_lin_vel`` to zero on deploy and accept a small sim2real
+         gap — the policy was trained with noise on this channel.
+    Either way, the driver returns a single tuple per call.
     """
 
     @abstractmethod
-    def read(self) -> tuple[float, float, np.ndarray]:
-        """Return (roll_rad, pitch_rad, ang_vel_xyz_rad_s).
+    def read(self) -> tuple[np.ndarray, np.ndarray, np.ndarray]:
+        """Return (base_lin_vel_b[3], base_ang_vel_b[3], projected_gravity_b[3]).
 
-        ``ang_vel_xyz`` shape (3,) float32, body frame.
-        Must be non-blocking and fast (<1 ms typically).
+        All in the robot base body frame, float32. Must be non-blocking
+        and fast (<1 ms typical).
         """
         ...
 
@@ -37,7 +44,7 @@ class JointDriver(ABC):
     """Bipedal-leg actuator bus (10 joints).
 
     All vectors are length-10 float arrays, ordered exactly as
-    ``constants.JOINT_NAMES``. Implementations must permute internally if
+    ``constants.JOINT_NAMES``. Concrete drivers must permute internally if
     the hardware-side wiring uses a different order.
     """
 
@@ -51,8 +58,8 @@ class JointDriver(ABC):
         """Send joint position targets in radians (length-10 array).
 
         The driver is responsible for any unit conversion (rad -> motor
-        encoder counts, degrees, etc.) and for enforcing per-motor PD
-        gains on the firmware side.
+        encoder counts, degrees, etc.) and for applying per-motor PD gains
+        on the firmware side.
         """
         ...
 
@@ -62,13 +69,9 @@ class JointDriver(ABC):
 
 
 class CommandSource(ABC):
-    """Velocity command input — joystick, WS, scripted, etc.
-
-    Returns the (lin_vel_x, ang_vel_z) command consumed by the policy.
-    Lateral velocity is hard-coded to 0 by the training command config.
-    """
+    """Velocity command input — joystick, websocket, scripted, …"""
 
     @abstractmethod
-    def read(self) -> tuple[float, float]:
-        """Return (lin_vel_x_m_s, ang_vel_z_rad_s)."""
+    def read(self) -> np.ndarray:
+        """Return [vx_cmd, vy_cmd, wz_cmd] (m/s, m/s, rad/s)."""
         ...

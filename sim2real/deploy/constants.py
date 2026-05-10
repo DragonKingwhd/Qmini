@@ -1,17 +1,18 @@
 """Qmini deploy-side constants.
 
 Mirror of the training side — values MUST match
-source/Qmini/Qmini/tasks/manager_based/qmini/qmini_env_cfg.py and mdp/actions.py.
-If you change anything here, update training side and re-export the policy.
+``source/Qmini/Qmini/tasks/manager_based/qmini/qmini_env_cfg.py`` and
+``mdp/actions.py``. If you change anything here, update the training side
+and re-export the policy.
 """
 
 from __future__ import annotations
 
-import math
-
-# ---- Joint order (matches Isaac Lab articulation order, which follows URDF) ----
-# IMPORTANT: when wiring real motors, this is the canonical index used inside
-# the policy. The real driver must permute its hardware-side ordering to match.
+# ---- Joint order ----
+# Canonical joint order used by both the policy and the deploy package.
+# Isaac Lab's Articulation orders joints by USD prim order (which follows
+# the original URDF order for this asset). The hardware driver MUST permute
+# its bus-side ordering to match this list.
 JOINT_NAMES: list[str] = [
     "hip_yaw_l",
     "hip_roll_l",
@@ -25,51 +26,67 @@ JOINT_NAMES: list[str] = [
     "ankle_pitch_r",
 ]
 NUM_JOINTS = len(JOINT_NAMES)  # 10
-NUM_LEGS = 2
 
-# ---- Default standing pose (= ArticulationCfg.init_state.joint_pos) ----
-DEFAULT_JOINT_POS: list[float] = [0.4, -0.1, -1.5, 1.0, -1.3, -0.4, 0.1, 1.5, -1.0, 1.3]
+# ---- Default joint positions ----
+# Mirrors qmini_env_cfg.py:QminiWalkSceneCfg.robot.init_state.joint_pos.
+# Used both as the "zero" of the residual action and as the offset
+# subtracted in joint_pos_rel observation.
+DEFAULT_JOINT_POS: dict[str, float] = {
+    "hip_yaw_l":     0.4,
+    "hip_roll_l":   -0.1,
+    "hip_pitch_l":  -1.5,
+    "knee_pitch_l":  1.0,
+    "ankle_pitch_l":-1.3,
+    "hip_yaw_r":    -0.4,
+    "hip_roll_r":    0.1,
+    "hip_pitch_r":   1.5,
+    "knee_pitch_r": -1.0,
+    "ankle_pitch_r": 1.3,
+}
+DEFAULT_JOINT_POS_VEC: list[float] = [DEFAULT_JOINT_POS[n] for n in JOINT_NAMES]
 
-# ---- Reference pose used in observations (BIRLActionTermCfg.ref_joint_pos) ----
-REF_JOINT_POS: list[float] = [0.4, -0.1, -1.5, 1.0, -1.3, -0.4, 0.1, 1.5, -1.0, 1.3]
+# ---- Reference gait parameters (= QminiReferenceGaitActionCfg defaults) ----
+GAIT_PERIOD_S = 0.72
+GAIT_STANCE_RATIO = 0.60
+HIP_PITCH_AMPLITUDE = 0.22
+KNEE_PITCH_AMPLITUDE = 0.24
+ANKLE_PITCH_AMPLITUDE = 0.14
+PUSH_OFF_ANKLE_SCALE = 0.18
 
-# ---- BIRL action scaling: 12 = 2 phase frequencies + 10 joint deltas (rad/s) ----
-ACTION_DIM = NUM_LEGS + NUM_JOINTS  # 12
-INC_LOW: list[float]  = [0.5, 0.5] + [-15.0] * 10
-INC_HIGH: list[float] = [3.5, 3.5] + [+15.0] * 10
-ACTION_CLIP = 1.0  # rsl_rl wrapper clip_actions
+# ---- Residual action scale ----
+# Mirrors QminiReferenceGaitActionCfg.scale (0.10).
+ACTION_SCALE = 0.10
+ACTION_DIM = NUM_JOINTS  # 10
+ACTION_CLIP = 1.0        # rsl_rl wrapper default
 
-# ---- Phase modulator ----
-CONVERT_PHI = 1.2 * math.pi  # phase < CONVERT_PHI -> support, else swing
+# ---- Observation dims (single-step, no history) ----
+# Order is fixed by qmini_env_cfg.py:ObservationsCfg.PolicyCfg:
+#   base_lin_vel       (3)   body frame, m/s
+#   base_ang_vel       (3)   body frame, rad/s
+#   projected_gravity  (3)   gravity vector projected into body frame
+#   velocity_commands  (3)   [lin_vel_x_cmd, lin_vel_y_cmd, ang_vel_z_cmd]
+#   joint_pos_rel     (10)   joint_pos - default_joint_pos
+#   joint_vel_rel     (10)   joint_vel - default_joint_vel  (default_vel = 0)
+#   last_action       (10)   raw policy output of the previous step
+#   gait_phase_obs     (2)   [sin(2π·phase), cos(2π·phase)]
+OBS_DIM = 3 + 3 + 3 + 3 + 10 + 10 + 10 + 2  # 44
 
-# ---- Observation scaling factors (must mirror mdp/observations.py) ----
-ANG_VEL_SCALE = 0.5
-JOINT_VEL_SCALE = 0.1
-
-# ---- Observation history ----
-OBS_PER_STEP = 45           # see mdp/observations.py (PolicyCfg): 2+2+3+10+10+10+4+4
-OBS_HISTORY_LEN = 3
-OBS_DIM = OBS_PER_STEP * OBS_HISTORY_LEN  # 135
-
-# ---- Static-flag threshold (mdp/observations.py::_get_static_flag) ----
-STATIC_CMD_NORM_THRESHOLD = 0.15
-
-# ---- Joint soft limits ----
-# Use the URDF soft limits at deploy time as an extra safety clamp.
-# Values left as None mean "trust the URDF / firmware-side limit". Override
-# with measured values once you've calibrated mechanical hard stops.
+# ---- Joint soft limits (rad) ----
+# Used as a final safety clamp on the commanded joint target. ``None`` means
+# "trust whatever the firmware enforces". Override with measured values
+# once mechanical hard stops are characterised.
 JOINT_LIMIT_LOW:  list[float | None] = [None] * 10
 JOINT_LIMIT_HIGH: list[float | None] = [None] * 10
 
 # ---- Control loop ----
-# Training: sim.dt = 0.001, decimation = 15  -> step_dt = 0.015 s -> 66.67 Hz.
-# Keep deploy at the same rate so phase integration matches.
-CONTROL_HZ = 66.6667
-CONTROL_DT = 1.0 / CONTROL_HZ  # ~0.015 s
+# Training: sim.dt=0.005, decimation=4 -> step_dt = 0.020 s -> 50 Hz.
+# Keep deploy at the same rate so the reference-gait phase advances at the
+# same speed as during training.
+CONTROL_HZ = 50.0
+CONTROL_DT = 1.0 / CONTROL_HZ  # 0.02 s
 
 # ---- Safety thresholds ----
 INFERENCE_TIMEOUT_S = 0.012  # hold previous target if inference > 12 ms
-ACTION_RATE_LIMIT = 50.0     # rad/s, slew limit on commanded joint targets
 
 
 def clamp(x: float, lo: float, hi: float) -> float:

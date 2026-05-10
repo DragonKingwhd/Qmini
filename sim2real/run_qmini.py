@@ -13,7 +13,7 @@ from pathlib import Path
 from deploy.io.mock import ConstantCommand, MockJoints, WigglingIMU
 from deploy.main import QminiController
 
-# When you have a real driver, replace the three lines above with:
+# When you have a real driver, replace the import line above with:
 #   from deploy.io.real import RealIMU, RealJoints, JoystickCommand
 
 
@@ -21,7 +21,8 @@ def main() -> None:
     ap = argparse.ArgumentParser()
     ap.add_argument("--onnx", default="policy.onnx")
     ap.add_argument("--config", default="config/calibration.yaml")
-    ap.add_argument("--vx", type=float, default=0.3)
+    ap.add_argument("--vx", type=float, default=0.10)
+    ap.add_argument("--vy", type=float, default=0.0)
     ap.add_argument("--wz", type=float, default=0.0)
     ap.add_argument("--duration", type=float, default=None,
                     help="Stop after N seconds (default: run until Ctrl+C)")
@@ -30,7 +31,7 @@ def main() -> None:
 
     imu = WigglingIMU()              # TODO: RealIMU(...)
     joints = MockJoints()            # TODO: RealJoints(...)
-    cmd = ConstantCommand(vx=args.vx, wz=args.wz)  # TODO: JoystickCommand(...)
+    cmd = ConstantCommand(vx=args.vx, vy=args.vy, wz=args.wz)  # TODO: JoystickCommand(...)
 
     ctrl = QminiController(
         onnx_path=Path(args.onnx),
@@ -43,7 +44,7 @@ def main() -> None:
     ctrl.check_pose()
 
     if not args.skip_imu_calib:
-        print("[INFO] hold robot still for IMU bias calibration (3s)...")
+        print("[INFO] hold robot still for IMU gyro bias calibration (3s)...")
         ctrl.calibrate_imu(duration_s=3.0)
 
     print("[INFO] starting control loop. Ctrl+C to stop.")

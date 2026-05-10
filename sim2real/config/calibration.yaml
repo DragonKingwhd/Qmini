@@ -1,12 +1,11 @@
-# Per-robot calibration. Fill in after running on-site IMU bias calibration.
-# Values are in radians.
-imu:
-  # Mean roll/pitch when robot is stationary on flat ground.
-  bias_rp: null            # e.g. [0.003, -0.012]
-  # Mean gyro reading (rad/s) when stationary.
-  bias_gyro: null          # e.g. [0.0, 0.0, 0.0]
+# Per-robot calibration. Fill in after running on-site IMU calibration.
 
-# Optional: per-joint encoder zero-offset (rad), if your motor zero != URDF zero.
+imu:
+  # Mean gyro reading (rad/s) when robot is stationary on flat ground.
+  # Length 3, [wx, wy, wz] in body frame.
+  gyro_bias: null            # e.g. [0.001, -0.002, 0.000]
+
+# Optional: per-joint encoder zero offset (rad), if your motor zero != URDF zero.
 # Length must be 10, ordered like deploy.constants.JOINT_NAMES.
 joints:
   offset: null

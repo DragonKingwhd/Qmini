@@ -1,13 +1,14 @@
-"""ONNX policy wrapper + BIRL action post-processing.
+"""ONNX policy wrapper + Qmini reference-gait action post-processing.
 
-The policy's raw output (12,) is in [-1, 1]. Mirrors training-side
-BIRLActionTerm.process_actions:
+The policy outputs a 10-D residual in (roughly) [-1, 1]. Mirrors training-side
+``QminiReferenceGaitAction.process_actions``:
 
-    raw  -> clip([-1, 1]) -> scale to [INC_LOW, INC_HIGH]
-    freq           = scaled[0:2]              -> drives the PhaseModulator
-    joint_deltas   = scaled[2:12] (rad/s)     -> integrated:
-                       current_joint_target += joint_deltas * step_dt
-                     then clipped to joint soft limits.
+    target = default_joint_pos + reference_offsets(phase) + raw_action * scale
+
+The reference-gait phase advances every control step; ``BIRLPostProcessor``
+takes a ``ReferenceGait`` instance and advances it inside ``step``, exactly
+mirroring ``_compute_reference_offsets`` -> ``_advance_phase`` -> sample order
+on the training side.
 """
 
 from __future__ import annotations
@@ -21,16 +22,14 @@ import onnxruntime as ort
 from .constants import (
     ACTION_CLIP,
     ACTION_DIM,
-    CONTROL_DT,
-    DEFAULT_JOINT_POS,
-    INC_HIGH,
-    INC_LOW,
+    ACTION_SCALE,
+    DEFAULT_JOINT_POS_VEC,
     JOINT_LIMIT_HIGH,
     JOINT_LIMIT_LOW,
     NUM_JOINTS,
-    NUM_LEGS,
     OBS_DIM,
 )
+from .reference_gait import ReferenceGait
 
 
 class ONNXPolicy:
@@ -48,7 +47,7 @@ class ONNXPolicy:
             )
 
     def infer(self, obs: np.ndarray) -> tuple[np.ndarray, float]:
-        """Run one inference. Returns (raw_action[12], elapsed_s)."""
+        """Run one inference. Returns (raw_action[10], elapsed_s)."""
         t0 = time.perf_counter()
         out = self.session.run(
             [self.output_name], {self.input_name: obs.reshape(1, OBS_DIM).astype(np.float32)}
@@ -56,42 +55,40 @@ class ONNXPolicy:
         return out[0].astype(np.float32), time.perf_counter() - t0
 
 
-class BIRLPostProcessor:
-    """Mirrors BIRLActionTerm.process_actions on the deploy side.
+class GaitActionPostProcessor:
+    """Mirror of QminiReferenceGaitAction on the deploy side."""
 
-    Holds the integrated joint target between steps. Reset before every run.
-    """
-
-    def __init__(self) -> None:
-        self._inc_low = np.asarray(INC_LOW, dtype=np.float32)
-        self._inc_high = np.asarray(INC_HIGH, dtype=np.float32)
-        # Build per-joint hard clamp from JOINT_LIMIT_*; ±inf where unset.
+    def __init__(self, gait: ReferenceGait):
+        self._gait = gait
+        self._default = np.asarray(DEFAULT_JOINT_POS_VEC, dtype=np.float32)
         self._lo = np.array(
             [v if v is not None else -np.inf for v in JOINT_LIMIT_LOW], dtype=np.float32
         )
         self._hi = np.array(
             [v if v is not None else +np.inf for v in JOINT_LIMIT_HIGH], dtype=np.float32
         )
-        self._target = np.asarray(DEFAULT_JOINT_POS, dtype=np.float32).copy()
-
-    def reset(self) -> None:
-        self._target = np.asarray(DEFAULT_JOINT_POS, dtype=np.float32).copy()
+        self._last_target = self._default.copy()
 
     @property
-    def current_joint_target(self) -> np.ndarray:
-        return self._target
+    def last_target(self) -> np.ndarray:
+        return self._last_target
 
-    def step(self, raw_action: np.ndarray, step_dt: float = CONTROL_DT) -> tuple[np.ndarray, np.ndarray]:
-        """Process raw action.
+    def reset(self) -> None:
+        self._last_target = self._default.copy()
 
-        Returns (frequency[2], joint_target[10]).
+    def step(self, raw_action: np.ndarray) -> np.ndarray:
+        """One control step.
+
+        Order matches QminiReferenceGaitAction.process_actions():
+            1. clip raw action to [-ACTION_CLIP, ACTION_CLIP]
+            2. advance the gait phase by one step_dt
+            3. compute reference offsets at the *advanced* phase
+            4. target = default + offsets + raw * scale, then clamp.
         """
-        raw = np.clip(raw_action.astype(np.float32), -ACTION_CLIP, ACTION_CLIP)
-        scaled = 0.5 * (raw + 1.0) * (self._inc_high - self._inc_low) + self._inc_low
-
-        freq = scaled[:NUM_LEGS]
-        joint_deltas = scaled[NUM_LEGS:NUM_LEGS + NUM_JOINTS]
-
-        self._target = self._target + joint_deltas * step_dt
-        self._target = np.clip(self._target, self._lo, self._hi).astype(np.float32)
-        return freq, self._target
+        raw = np.clip(raw_action.astype(np.float32), -ACTION_CLIP, ACTION_CLIP).reshape(NUM_JOINTS)
+        self._gait.advance()
+        offsets = self._gait.offsets()
+        target = self._default + offsets + raw * ACTION_SCALE
+        target = np.clip(target, self._lo, self._hi).astype(np.float32)
+        self._last_target = target
+        return target
