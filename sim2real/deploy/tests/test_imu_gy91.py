@@ -18,7 +18,10 @@ Run:
 import time
 import struct
 
-from smbus2 import SMBus
+try:
+    from smbus2 import SMBus  # pip install smbus2 (preferred)
+except ImportError:
+    from smbus import SMBus   # apt install python3-smbus (fallback)
 
 I2C_BUS = 1
 
