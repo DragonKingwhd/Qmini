@@ -8,10 +8,11 @@ venv/
 *.log
 *.npz
 *.pth
+*.pt
 # *.onnx
 checkpoints/
 runs/
-logs/
+# logs/
 .DS_Store
 
 ###相关工具文件###

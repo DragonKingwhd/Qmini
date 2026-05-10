@@ -1,0 +1,2288 @@
+--- git status ---
+On branch main
+Your branch is up to date with 'origin/main'.
+
+Changes not staged for commit:
+  (use "git add <file>..." to update what will be committed)
+  (use "git restore <file>..." to discard changes in working directory)
+	modified:   Qmini/source/Qmini/Qmini/assets/Qmini.usd
+	modified:   Qmini/source/Qmini/Qmini/tasks/manager_based/qmini/__init__.py
+	modified:   Qmini/source/Qmini/Qmini/tasks/manager_based/qmini/agents/rsl_rl_ppo_cfg.py
+	modified:   Qmini/source/Qmini/Qmini/tasks/manager_based/qmini/mdp/__init__.py
+	modified:   Qmini/source/Qmini/Qmini/tasks/manager_based/qmini/mdp/actions.py
+	modified:   Qmini/source/Qmini/Qmini/tasks/manager_based/qmini/mdp/observations.py
+	modified:   Qmini/source/Qmini/Qmini/tasks/manager_based/qmini/mdp/rewards.py
+	modified:   Qmini/source/Qmini/Qmini/tasks/manager_based/qmini/qmini_env.py
+	modified:   Qmini/source/Qmini/Qmini/tasks/manager_based/qmini/qmini_env_cfg.py
+	modified:   record.md
+
+Untracked files:
+  (use "git add <file>..." to include in what will be committed)
+	Qmini/outputs/2026-05-10/11-31-08/
+	Qmini/scripts/convert_qmini_usd_to_refs.py
+	Qmini/source/Qmini/Qmini/assets/.thumbs/
+	Qmini/source/Qmini/Qmini/assets/Qmini_ref.usd
+	Qmini/source/Qmini/Qmini/assets/Qmini_ref.usda
+	Qmini/source/Qmini/Qmini/tasks/manager_based/qmini/mdp/curriculums.py
+
+no changes added to commit (use "git add" and/or "git commit -a") 
+
+
+--- git diff ---
+diff --git a/Qmini/source/Qmini/Qmini/assets/Qmini.usd b/Qmini/source/Qmini/Qmini/assets/Qmini.usd
+index efee2ec..fad7545 100644
+Binary files a/Qmini/source/Qmini/Qmini/assets/Qmini.usd and b/Qmini/source/Qmini/Qmini/assets/Qmini.usd differ
+diff --git a/Qmini/source/Qmini/Qmini/tasks/manager_based/qmini/__init__.py b/Qmini/source/Qmini/Qmini/tasks/manager_based/qmini/__init__.py
+index 1871531..fe49c20 100644
+--- a/Qmini/source/Qmini/Qmini/tasks/manager_based/qmini/__init__.py
++++ b/Qmini/source/Qmini/Qmini/tasks/manager_based/qmini/__init__.py
+@@ -1,29 +1,26 @@
+-"""Qmini BIRL bipedal locomotion task registration."""
++"""Qmini walking task registration."""
+ 
+ import gymnasium as gym
+ 
+ from . import agents
+ 
+-##
+-# Register Gym environments.
+-##
+ 
+ gym.register(
+-    id="Qmini-BIRL-v0",
+-    entry_point=f"{__name__}.qmini_env:QminiBIRLEnv",
++    id="Qmini-Walk-v0",
++    entry_point=f"{__name__}.qmini_env:QminiWalkEnv",
+     disable_env_checker=True,
+     kwargs={
+-        "env_cfg_entry_point": f"{__name__}.qmini_env_cfg:QminiBIRLEnvCfg",
+-        "rsl_rl_cfg_entry_point": f"{agents.__name__}.rsl_rl_ppo_cfg:QminiBIRLPPORunnerCfg",
++        "env_cfg_entry_point": f"{__name__}.qmini_env_cfg:QminiWalkEnvCfg",
++        "rsl_rl_cfg_entry_point": f"{agents.__name__}.rsl_rl_ppo_cfg:QminiWalkPPORunnerCfg",
+     },
+ )
+ 
+ gym.register(
+-    id="Qmini-BIRL-Play-v0",
+-    entry_point=f"{__name__}.qmini_env:QminiBIRLEnv",
++    id="Qmini-Walk-Play-v0",
++    entry_point=f"{__name__}.qmini_env:QminiWalkEnv",
+     disable_env_checker=True,
+     kwargs={
+-        "env_cfg_entry_point": f"{__name__}.qmini_env_cfg:QminiBIRLEnvCfg_PLAY",
+-        "rsl_rl_cfg_entry_point": f"{agents.__name__}.rsl_rl_ppo_cfg:QminiBIRLPPORunnerCfg",
++        "env_cfg_entry_point": f"{__name__}.qmini_env_cfg:QminiWalkEnvCfg_PLAY",
++        "rsl_rl_cfg_entry_point": f"{agents.__name__}.rsl_rl_ppo_cfg:QminiWalkPPORunnerCfg",
+     },
+ )
+diff --git a/Qmini/source/Qmini/Qmini/tasks/manager_based/qmini/agents/rsl_rl_ppo_cfg.py b/Qmini/source/Qmini/Qmini/tasks/manager_based/qmini/agents/rsl_rl_ppo_cfg.py
+index 0642911..037ee70 100644
+--- a/Qmini/source/Qmini/Qmini/tasks/manager_based/qmini/agents/rsl_rl_ppo_cfg.py
++++ b/Qmini/source/Qmini/Qmini/tasks/manager_based/qmini/agents/rsl_rl_ppo_cfg.py
+@@ -1,33 +1,32 @@
+-"""RSL-RL PPO configuration for Qmini BIRL locomotion."""
++"""RSL-RL PPO configuration for Qmini walking."""
+ 
+ from isaaclab.utils import configclass
+-
+ from isaaclab_rl.rsl_rl import RslRlOnPolicyRunnerCfg, RslRlPpoActorCriticCfg, RslRlPpoAlgorithmCfg
+ 
+ 
+ @configclass
+-class QminiBIRLPPORunnerCfg(RslRlOnPolicyRunnerCfg):
++class QminiWalkPPORunnerCfg(RslRlOnPolicyRunnerCfg):
+     num_steps_per_env = 24
+     max_iterations = 5000
+     save_interval = 200
+-    experiment_name = "qmini_birl"
++    experiment_name = "qmini_walk"
+     empirical_normalization = False
+     policy = RslRlPpoActorCriticCfg(
+-        init_noise_std=0.8,
+-        actor_hidden_dims=[512, 256],
+-        critic_hidden_dims=[512, 256],
+-        activation="relu",
++        init_noise_std=0.6,
++        actor_hidden_dims=[512, 256, 128],
++        critic_hidden_dims=[512, 256, 128],
++        activation="elu",
+     )
+     algorithm = RslRlPpoAlgorithmCfg(
+         value_loss_coef=1.0,
+         use_clipped_value_loss=True,
+         clip_param=0.2,
+-        entropy_coef=0.0005,
+-        num_learning_epochs=3,
++        entropy_coef=0.005,
++        num_learning_epochs=5,
+         num_mini_batches=4,
+         learning_rate=1.0e-3,
+         schedule="adaptive",
+-        gamma=0.995,
++        gamma=0.99,
+         lam=0.95,
+         desired_kl=0.01,
+         max_grad_norm=1.0,
+diff --git a/Qmini/source/Qmini/Qmini/tasks/manager_based/qmini/mdp/__init__.py b/Qmini/source/Qmini/Qmini/tasks/manager_based/qmini/mdp/__init__.py
+index c718875..e95439c 100644
+--- a/Qmini/source/Qmini/Qmini/tasks/manager_based/qmini/mdp/__init__.py
++++ b/Qmini/source/Qmini/Qmini/tasks/manager_based/qmini/mdp/__init__.py
+@@ -7,3 +7,4 @@ from .observations import *  # noqa: F401, F403
+ from .rewards import *  # noqa: F401, F403
+ from .terminations import *  # noqa: F401, F403
+ from .events import *  # noqa: F401, F403
++from .curriculums import *  # noqa: F401, F403
+diff --git a/Qmini/source/Qmini/Qmini/tasks/manager_based/qmini/mdp/actions.py b/Qmini/source/Qmini/Qmini/tasks/manager_based/qmini/mdp/actions.py
+index 185b130..8a83002 100644
+--- a/Qmini/source/Qmini/Qmini/tasks/manager_based/qmini/mdp/actions.py
++++ b/Qmini/source/Qmini/Qmini/tasks/manager_based/qmini/mdp/actions.py
+@@ -1,126 +1,67 @@
+-"""Custom BIRL action term with PhaseModulator for Qmini bipedal locomotion."""
++"""Reference gait action term for Qmini walking.
++
++The policy outputs residual joint-position commands around a simple sinusoidal
++biped reference gait. This gives PPO a walking prior instead of asking it to
++discover leg phasing from scratch.
++"""
+ 
+ from __future__ import annotations
+ 
+ import math
+-import torch
+-from collections import deque
+-from collections.abc import Sequence
+ from dataclasses import MISSING
+ from typing import TYPE_CHECKING
+ 
+-from isaaclab.assets.articulation import Articulation
+-from isaaclab.managers.action_manager import ActionTerm
+-from isaaclab.managers.manager_term_cfg import ActionTermCfg
++import torch
++
++from isaaclab.assets import Articulation
++from isaaclab.managers import ActionTerm, ActionTermCfg
+ from isaaclab.utils import configclass
+ 
+ if TYPE_CHECKING:
+-    from isaaclab.envs import ManagerBasedEnv
+-
+-
+-class PhaseModulator:
+-    """Gait phase generator for bipedal locomotion.
+-
+-    Maintains per-environment phase state for each leg, updated with network-output frequencies.
+-    Phase determines support/swing mask for gait coordination.
+-    """
++    from isaaclab.envs import ManagerBasedRLEnv
+ 
+-    def __init__(self, time_step: float, num_envs: int, num_legs: int, device: str):
+-        self.num_legs = num_legs
+-        self.num_envs = num_envs
+-        self.device = device
+-        self._time_step = time_step
+-        self._phase = torch.zeros(num_envs, num_legs, dtype=torch.float, device=device)
+-        self._frequency = torch.ones(num_envs, num_legs, dtype=torch.float, device=device) * 0.5
+-        self.reset(env_ids=torch.arange(num_envs, device=device))
+ 
+-    def reset(self, env_ids: torch.Tensor):
+-        """Reset phase to random initial values for given environments."""
+-        init_phase = torch.rand(len(env_ids), self.num_legs, device=self.device) * 2 * math.pi
+-        self._phase[env_ids] = init_phase % (2 * math.pi)
+-        self._frequency[env_ids] = 0.5
++class QminiReferenceGaitAction(ActionTerm):
++    """Joint-position action with an anti-phase walking reference."""
+ 
+-    def compute(self, frequency: torch.Tensor) -> torch.Tensor:
+-        """Update phase based on network-output frequencies."""
+-        self._frequency = frequency
+-        self._phase = (self._phase + 2 * math.pi * frequency * self._time_step) % (2 * math.pi)
+-        return self._phase
+-
+-    @property
+-    def frequency(self) -> torch.Tensor:
+-        return self._frequency
+-
+-    @property
+-    def phase(self) -> torch.Tensor:
+-        return self._phase
++    cfg: QminiReferenceGaitActionCfg
++    _asset: Articulation
+ 
++    def __init__(self, cfg: QminiReferenceGaitActionCfg, env: ManagerBasedRLEnv):
++        super().__init__(cfg, env)
+ 
+-class BIRLActionTerm(ActionTerm):
+-    """Bio-Inspired Rhythmic Locomotion action term.
++        self._asset: Articulation = env.scene[cfg.asset_name]
++        self._joint_ids, self._joint_names = self._asset.find_joints(cfg.joint_names)
++        self._num_joints = len(self._joint_ids)
++        self._scale = cfg.scale
+ 
+-    Processes 12-dim network output: [2 phase frequencies, 10 joint position deltas].
+-    Maintains phase modulator state, incremental joint position targets, and action history.
+-    """
++        self._gait_period = max(cfg.gait_period, env.step_dt)
++        self._stance_ratio = min(max(cfg.stance_ratio, 0.05), 0.95)
++        self._hip_amp = cfg.hip_pitch_amplitude
++        self._knee_amp = cfg.knee_pitch_amplitude
++        self._ankle_amp = cfg.ankle_pitch_amplitude
++        self._push_off_ankle_scale = cfg.push_off_ankle_scale
+ 
+-    cfg: BIRLActionTermCfg
+-    _asset: Articulation
++        self._gait_phase = torch.zeros(env.num_envs, device=env.device)
++        self._raw_actions = torch.zeros(env.num_envs, self._num_joints, device=env.device)
++        self._processed_actions = torch.zeros(env.num_envs, self._num_joints, device=env.device)
+ 
+-    def __init__(self, cfg: BIRLActionTermCfg, env: ManagerBasedEnv):
+-        super().__init__(cfg, env)
++        def _find(name: str) -> int | None:
++            for index, joint_name in enumerate(self._joint_names):
++                if joint_name == name:
++                    return index
++            return None
+ 
+-        self._num_joints = self._asset.num_joints  # 10
+-        self._num_legs = 2
+-        self._convert_phi = 1.2 * math.pi
+-
+-        # Action dimensions: 2 (freq) + 10 (joints) = 12
+-        self._raw_actions = torch.zeros(self.num_envs, self.action_dim, device=self.device)
+-        self._processed_actions = torch.zeros(self.num_envs, self._num_joints, device=self.device)
+-
+-        # Action scaling: incremental mode ranges
+-        self._action_low = torch.tensor(
+-            cfg.inc_low_ranges, dtype=torch.float, device=self.device
+-        )
+-        self._action_high = torch.tensor(
+-            cfg.inc_high_ranges, dtype=torch.float, device=self.device
+-        )
+-
+-        # Reference joint positions
+-        self._ref_joint_pos = torch.tensor(
+-            cfg.ref_joint_pos, dtype=torch.float, device=self.device
+-        ).unsqueeze(0).repeat(self.num_envs, 1)
+-
+-        # Current joint position targets (initialized to default)
+-        default_joint_pos = self._asset.data.default_joint_pos[0].clone()
+-        self._current_joint_target = default_joint_pos.unsqueeze(0).repeat(self.num_envs, 1)
+-
+-        # Joint position limits from URDF
+-        joint_pos_limits = self._asset.data.soft_joint_pos_limits[0]
+-        self._joint_limit_low = joint_pos_limits[:, 0].unsqueeze(0).repeat(self.num_envs, 1)
+-        self._joint_limit_high = joint_pos_limits[:, 1].unsqueeze(0).repeat(self.num_envs, 1)
+-
+-        # Phase modulator
+-        step_dt = env.step_dt  # decimation * sim_dt
+-        self._phase_modulator = PhaseModulator(
+-            time_step=step_dt, num_envs=self.num_envs, num_legs=self._num_legs, device=self.device
+-        )
+-
+-        # Histories for smoothness rewards
+-        self._action_history = deque(maxlen=3)
+-        self._net_out_history = deque(maxlen=3)
+-        for _ in range(3):
+-            self._action_history.append(self._current_joint_target.clone())
+-        for _ in range(3):
+-            self._net_out_history.append(torch.zeros(self.num_envs, self.action_dim, device=self.device))
+-
+-        # Foot phase masks
+-        self._update_phase_masks()
+-
+-        # Last foot force for soft contact reward
+-        self._last_foot_frc = torch.zeros(self.num_envs, self._num_legs, device=self.device)
++        self._left_hip = _find("hip_pitch_l")
++        self._right_hip = _find("hip_pitch_r")
++        self._left_knee = _find("knee_pitch_l")
++        self._right_knee = _find("knee_pitch_r")
++        self._left_ankle = _find("ankle_pitch_l")
++        self._right_ankle = _find("ankle_pitch_r")
+ 
+     @property
+     def action_dim(self) -> int:
+-        return self._num_legs + self._num_joints  # 2 + 10 = 12
++        return self._num_joints
+ 
+     @property
+     def raw_actions(self) -> torch.Tensor:
+@@ -130,138 +71,81 @@ class BIRLActionTerm(ActionTerm):
+     def processed_actions(self) -> torch.Tensor:
+         return self._processed_actions
+ 
+-    # --- Public accessors for observations and rewards ---
+-
+-    @property
+-    def phase_modulator(self) -> PhaseModulator:
+-        return self._phase_modulator
+-
+-    @property
+-    def current_joint_target(self) -> torch.Tensor:
+-        return self._current_joint_target
+-
+-    @property
+-    def ref_joint_pos(self) -> torch.Tensor:
+-        return self._ref_joint_pos
+-
+-    @property
+-    def action_history(self) -> deque:
+-        return self._action_history
+-
+-    @property
+-    def net_out_history(self) -> deque:
+-        return self._net_out_history
+-
+-    @property
+-    def foot_support_mask(self) -> torch.Tensor:
+-        return self._foot_support_mask
+-
+     @property
+-    def foot_swing_mask(self) -> torch.Tensor:
+-        return self._foot_swing_mask
++    def gait_phase(self) -> torch.Tensor:
++        return self._gait_phase
+ 
+-    @property
+-    def foot_phase(self) -> torch.Tensor:
+-        return self._phase_modulator.phase
+-
+-    @property
+-    def pm_phase(self) -> torch.Tensor:
+-        """Phase signal: [sin(phase_l), sin(phase_r), cos(phase_l), cos(phase_r)]"""
+-        phase = self._phase_modulator.phase
+-        return torch.cat([torch.sin(phase), torch.cos(phase)], dim=1)
+-
+-    @property
+-    def pm_frequency(self) -> torch.Tensor:
+-        return self._phase_modulator.frequency.clone()
+-
+-    @property
+-    def last_foot_frc(self) -> torch.Tensor:
+-        return self._last_foot_frc
+-
+-    @last_foot_frc.setter
+-    def last_foot_frc(self, value: torch.Tensor):
+-        self._last_foot_frc = value
++    def process_actions(self, actions: torch.Tensor) -> None:
++        self._raw_actions[:] = actions
++        default_pos = self._asset.data.default_joint_pos[:, self._joint_ids]
++        self._processed_actions = default_pos + self._compute_reference_offsets() + actions * self._scale
+ 
+-    @property
+-    def convert_phi(self) -> float:
+-        return self._convert_phi
++    def apply_actions(self) -> None:
++        self._asset.set_joint_position_target(self._processed_actions, joint_ids=self._joint_ids)
+ 
+-    @property
+-    def num_legs(self) -> int:
+-        return self._num_legs
+-
+-    def _update_phase_masks(self):
+-        """Update foot support/swing masks based on current phase."""
+-        phase = self._phase_modulator.phase
+-        mask_1 = phase >= 0.0
+-        mask_2 = phase < self._convert_phi
+-        self._foot_support_mask = torch.logical_and(mask_1, mask_2)
+-        self._foot_swing_mask = torch.logical_not(self._foot_support_mask)
+-
+-    def reset(self, env_ids: Sequence[int] | None = None) -> None:
+-        """Reset action term for specified environments."""
++    def reset(self, env_ids: torch.Tensor | None = None) -> None:
+         if env_ids is None:
+             env_ids = torch.arange(self.num_envs, device=self.device)
+-        else:
+-            env_ids = torch.as_tensor(env_ids, device=self.device)
+-
+-        # Reset joint targets to default positions
+-        default_pos = self._asset.data.default_joint_pos[0].clone()
+-        self._current_joint_target[env_ids] = default_pos.unsqueeze(0)
+-
+-        # Reset phase modulator
+-        self._phase_modulator.reset(env_ids)
+-        self._update_phase_masks()
+-
+-        # Reset last foot force
+-        self._last_foot_frc[env_ids] = 0.0
+-
+-    def process_actions(self, actions: torch.Tensor):
+-        """Process raw network output into joint position targets.
+-
+-        Args:
+-            actions: Raw network output of shape (num_envs, 12), values in [-1, 1].
+-        """
+-        self._raw_actions[:] = actions
+-
+-        # Scale from [-1, 1] to [action_low, action_high]
+-        scaled = 0.5 * (actions + 1.0) * (self._action_high - self._action_low) + self._action_low
+-        self._net_out_history.append(scaled.clone())
+-
+-        # Update phase modulator with frequency outputs
+-        freq = scaled[:, :self._num_legs]
+-        self._phase_modulator.compute(freq)
+-        self._update_phase_masks()
+-
+-        # Incremental joint position update
+-        joint_deltas = scaled[:, self._num_legs:]
+-        self._current_joint_target += joint_deltas * self._env.step_dt
+-
+-        # Clip to joint limits
+-        self._current_joint_target = torch.clamp(
+-            self._current_joint_target, self._joint_limit_low, self._joint_limit_high
+-        )
+-
+-        # Store in action history
+-        self._action_history.append(self._current_joint_target.clone())
+-
+-        # Set processed actions (joint position targets)
+-        self._processed_actions[:] = self._current_joint_target
+-
+-    def apply_actions(self):
+-        """Apply joint position targets to the robot actuators."""
+-        self._asset.set_joint_position_target(self._processed_actions)
++        self._gait_phase[env_ids] = torch.rand(len(env_ids), device=self.device)
++        self._raw_actions[env_ids] = 0.0
++
++    def _advance_phase(self) -> None:
++        self._gait_phase = (self._gait_phase + self._env.step_dt / self._gait_period) % 1.0
++
++    def _gait_profile(self, phase: torch.Tensor) -> tuple[torch.Tensor, torch.Tensor, torch.Tensor]:
++        sr = self._stance_ratio
++        in_stance = phase < sr
++
++        stance_progress = phase / sr
++        hip_stance = 1.0 - 2.0 * stance_progress
++        knee_stance = 0.15 * torch.sin(math.pi * stance_progress)
++        push_off = torch.clamp((stance_progress - 0.60) / 0.40, min=0.0)
++        ankle_stance = -0.55 * hip_stance + self._push_off_ankle_scale * push_off
++
++        swing_progress = (phase - sr) / (1.0 - sr)
++        hip_swing = -1.0 + 2.0 * swing_progress
++        knee_swing = torch.sin(math.pi * swing_progress)
++        ankle_swing = -0.35 * hip_swing - 0.20 * torch.sin(math.pi * swing_progress)
++
++        hip = torch.where(in_stance, hip_stance, hip_swing)
++        knee = torch.where(in_stance, knee_stance, knee_swing)
++        ankle = torch.where(in_stance, ankle_stance, ankle_swing)
++        return hip, knee, ankle
++
++    def _compute_reference_offsets(self) -> torch.Tensor:
++        self._advance_phase()
++        offsets = torch.zeros(self._env.num_envs, self._num_joints, device=self._env.device)
++
++        left_phase = self._gait_phase
++        right_phase = (self._gait_phase + 0.5) % 1.0
++        left_hip, left_knee, left_ankle = self._gait_profile(left_phase)
++        right_hip, right_knee, right_ankle = self._gait_profile(right_phase)
++
++        def _set(index: int | None, value: torch.Tensor) -> None:
++            if index is not None:
++                offsets[:, index] = value
++
++        # The right-leg pitch joints use mirrored signs in the Qmini default pose.
++        _set(self._left_hip, self._hip_amp * left_hip)
++        _set(self._right_hip, -self._hip_amp * right_hip)
++        _set(self._left_knee, self._knee_amp * left_knee)
++        _set(self._right_knee, -self._knee_amp * right_knee)
++        _set(self._left_ankle, self._ankle_amp * left_ankle)
++        _set(self._right_ankle, -self._ankle_amp * right_ankle)
++        return offsets
+ 
+ 
+ @configclass
+-class BIRLActionTermCfg(ActionTermCfg):
+-    """Configuration for the BIRL action term."""
+-
+-    class_type: type = BIRLActionTerm
+-
+-    # Incremental action ranges: [freq_l, freq_r, joint_0..joint_9]
+-    inc_low_ranges: list[float] = [0.5, 0.5] + [-15.0] * 10
+-    inc_high_ranges: list[float] = [3.5, 3.5] + [15.0] * 10
+-
+-    # Reference joint positions (default standing pose)
+-    ref_joint_pos: list[float] = [0.4, -0.1, -1.5, 1.0, -1.3, -0.4, 0.1, 1.5, -1.0, 1.3]
++class QminiReferenceGaitActionCfg(ActionTermCfg):
++    """Configuration for the Qmini reference gait action."""
++
++    class_type: type = QminiReferenceGaitAction
++    asset_name: str = MISSING
++    joint_names: list[str] = MISSING
++    scale: float = 0.10
++    gait_period: float = 0.72
++    stance_ratio: float = 0.60
++    hip_pitch_amplitude: float = 0.22
++    knee_pitch_amplitude: float = 0.24
++    ankle_pitch_amplitude: float = 0.14
++    push_off_ankle_scale: float = 0.18
+diff --git a/Qmini/source/Qmini/Qmini/tasks/manager_based/qmini/mdp/observations.py b/Qmini/source/Qmini/Qmini/tasks/manager_based/qmini/mdp/observations.py
+index 92c3230..44089ac 100644
+--- a/Qmini/source/Qmini/Qmini/tasks/manager_based/qmini/mdp/observations.py
++++ b/Qmini/source/Qmini/Qmini/tasks/manager_based/qmini/mdp/observations.py
+@@ -1,207 +1,20 @@
+-"""Custom observation terms for Qmini BIRL locomotion."""
++"""Custom observation terms for Qmini walking."""
+ 
+ from __future__ import annotations
+ 
+ import torch
+ from typing import TYPE_CHECKING
+ 
+-from isaaclab.assets import Articulation
+-from isaaclab.managers import SceneEntityCfg
+-from isaaclab.sensors import ContactSensor
+-from isaaclab.utils.math import euler_xyz_from_quat
+-
+ if TYPE_CHECKING:
+     from isaaclab.envs import ManagerBasedRLEnv
+ 
+ 
+-def _get_birl_action_term(env: ManagerBasedRLEnv):
+-    """Helper to retrieve the BIRL action term from the environment."""
+-    return env.action_manager._terms["birl_action"]
+-
+-
+-def _get_static_flag(env: ManagerBasedRLEnv) -> torch.Tensor:
+-    """Compute static flag: 0 when command is near zero, 1 otherwise. Shape: (N, 1)."""
+-    commands = env.command_manager.get_command("base_velocity")
+-    cmd_norm = torch.norm(commands[:, :3], dim=1, keepdim=True)
+-    return (cmd_norm >= 0.15).float()
+-
+-
+-# ---- Actor Observation Terms (49D total) ----
+-
+-
+-def velocity_commands_xz(env: ManagerBasedRLEnv) -> torch.Tensor:
+-    """Velocity commands [x_vel, yaw_rate]. Shape: (N, 2)."""
+-    commands = env.command_manager.get_command("base_velocity")
+-    return commands[:, [0, 2]]
+-
+-
+-def base_euler_rp(env: ManagerBasedRLEnv, asset_cfg: SceneEntityCfg = SceneEntityCfg("robot")) -> torch.Tensor:
+-    """Base roll and pitch from quaternion. Shape: (N, 2)."""
+-    asset: Articulation = env.scene[asset_cfg.name]
+-    roll, pitch, _ = euler_xyz_from_quat(asset.data.root_quat_w)
+-    return torch.stack([roll, pitch], dim=1)
+-
+-
+-def base_ang_vel_scaled(env: ManagerBasedRLEnv, asset_cfg: SceneEntityCfg = SceneEntityCfg("robot")) -> torch.Tensor:
+-    """Base angular velocity in body frame, scaled by 0.5. Shape: (N, 3)."""
+-    asset: Articulation = env.scene[asset_cfg.name]
+-    return asset.data.root_ang_vel_b * 0.5
+-
+-
+-def joint_pos_rel_to_ref(env: ManagerBasedRLEnv, asset_cfg: SceneEntityCfg = SceneEntityCfg("robot")) -> torch.Tensor:
+-    """Joint positions relative to reference pose. Shape: (N, 10)."""
+-    asset: Articulation = env.scene[asset_cfg.name]
+-    birl = _get_birl_action_term(env)
+-    return asset.data.joint_pos - birl.ref_joint_pos
+-
+-
+-def joint_vel_scaled(env: ManagerBasedRLEnv, asset_cfg: SceneEntityCfg = SceneEntityCfg("robot")) -> torch.Tensor:
+-    """Joint velocities scaled by 0.1. Shape: (N, 10)."""
+-    asset: Articulation = env.scene[asset_cfg.name]
+-    return asset.data.joint_vel * 0.1
+-
+-
+-def joint_pos_error(env: ManagerBasedRLEnv, asset_cfg: SceneEntityCfg = SceneEntityCfg("robot")) -> torch.Tensor:
+-    """Joint position error: target - actual. Shape: (N, 10)."""
+-    asset: Articulation = env.scene[asset_cfg.name]
+-    birl = _get_birl_action_term(env)
+-    return birl.current_joint_target - asset.data.joint_pos
+-
+-
+-def phase_signal(env: ManagerBasedRLEnv) -> torch.Tensor:
+-    """Phase modulator signal: [sin(phase), cos(phase)] * static_flag. Shape: (N, 4)."""
+-    birl = _get_birl_action_term(env)
+-    static_flag = _get_static_flag(env)
+-    return birl.pm_phase * static_flag
+-
+-
+-def phase_freq_signal(env: ManagerBasedRLEnv) -> torch.Tensor:
+-    """Phase frequency signal: (freq*0.3 - 1) * static_flag. Shape: (N, 4)."""
+-    birl = _get_birl_action_term(env)
+-    static_flag = _get_static_flag(env)
+-    pm_f = birl.pm_frequency
+-    # pm_f is (N, 2), expand to match pm_phase dimension (N, 4) by repeating
+-    freq_signal = torch.cat([pm_f * 0.3 - 1.0, pm_f * 0.3 - 1.0], dim=1)
+-    return freq_signal * static_flag
+-
+-
+-# ---- Critic Observation Terms (additional privileged info) ----
+-
+-
+-def cmd_lin_vel_error(env: ManagerBasedRLEnv, asset_cfg: SceneEntityCfg = SceneEntityCfg("robot")) -> torch.Tensor:
+-    """Linear velocity tracking error. Shape: (N, 1)."""
+-    asset: Articulation = env.scene[asset_cfg.name]
+-    commands = env.command_manager.get_command("base_velocity")
+-    return commands[:, [0]] - asset.data.root_lin_vel_b[:, [0]]
+-
+-
+-def cmd_ang_vel_error(env: ManagerBasedRLEnv, asset_cfg: SceneEntityCfg = SceneEntityCfg("robot")) -> torch.Tensor:
+-    """Angular velocity tracking error. Shape: (N, 1)."""
+-    asset: Articulation = env.scene[asset_cfg.name]
+-    commands = env.command_manager.get_command("base_velocity")
+-    return commands[:, [2]] - asset.data.root_ang_vel_b[:, [2]]
+-
+-
+-def base_lin_vel(env: ManagerBasedRLEnv, asset_cfg: SceneEntityCfg = SceneEntityCfg("robot")) -> torch.Tensor:
+-    """Base linear velocity in body frame. Shape: (N, 3)."""
+-    asset: Articulation = env.scene[asset_cfg.name]
+-    return asset.data.root_lin_vel_b
+-
+-
+-def base_euler_rp_privileged(
+-    env: ManagerBasedRLEnv, asset_cfg: SceneEntityCfg = SceneEntityCfg("robot")
+-) -> torch.Tensor:
+-    """Base euler (roll, pitch) - privileged (no delay). Shape: (N, 2)."""
+-    asset: Articulation = env.scene[asset_cfg.name]
+-    roll, pitch, _ = euler_xyz_from_quat(asset.data.root_quat_w)
+-    return torch.stack([roll, pitch], dim=1)
+-
+-
+-def base_ang_vel_scaled_privileged(
+-    env: ManagerBasedRLEnv, asset_cfg: SceneEntityCfg = SceneEntityCfg("robot")
+-) -> torch.Tensor:
+-    """Base angular velocity * 0.5 - privileged. Shape: (N, 3)."""
+-    asset: Articulation = env.scene[asset_cfg.name]
+-    return asset.data.root_ang_vel_b * 0.5
+-
+-
+-def joint_pos_rel_to_ref_privileged(
+-    env: ManagerBasedRLEnv, asset_cfg: SceneEntityCfg = SceneEntityCfg("robot")
+-) -> torch.Tensor:
+-    """Joint pos - ref_pos (privileged, no delay). Shape: (N, 10)."""
+-    asset: Articulation = env.scene[asset_cfg.name]
+-    birl = _get_birl_action_term(env)
+-    return asset.data.joint_pos - birl.ref_joint_pos
+-
+-
+-def joint_vel_scaled_privileged(
+-    env: ManagerBasedRLEnv, asset_cfg: SceneEntityCfg = SceneEntityCfg("robot")
+-) -> torch.Tensor:
+-    """Joint velocities * 0.1 - privileged. Shape: (N, 10)."""
+-    asset: Articulation = env.scene[asset_cfg.name]
+-    return asset.data.joint_vel * 0.1
+-
+-
+-def action_target_rel_to_ref(env: ManagerBasedRLEnv) -> torch.Tensor:
+-    """Action target positions relative to reference. Shape: (N, 10)."""
+-    birl = _get_birl_action_term(env)
+-    return birl.current_joint_target - birl.ref_joint_pos
+-
+-
+-def joint_pos_error_privileged(
+-    env: ManagerBasedRLEnv, asset_cfg: SceneEntityCfg = SceneEntityCfg("robot")
+-) -> torch.Tensor:
+-    """Joint position error (privileged). Shape: (N, 10)."""
+-    asset: Articulation = env.scene[asset_cfg.name]
+-    birl = _get_birl_action_term(env)
+-    return birl.current_joint_target - asset.data.joint_pos
+-
+-
+-def last_net_out_joints(env: ManagerBasedRLEnv) -> torch.Tensor:
+-    """Last network output (joint part only) / 15. Shape: (N, 10)."""
+-    birl = _get_birl_action_term(env)
+-    return birl.net_out_history[-1][:, birl.num_legs:] / 15.0
+-
+-
+-def foot_height_obs(
+-    env: ManagerBasedRLEnv,
+-    asset_cfg: SceneEntityCfg = SceneEntityCfg("robot"),
+-    sensor_cfg: SceneEntityCfg = SceneEntityCfg("contact_forces"),
+-) -> torch.Tensor:
+-    """Foot height (z position of foot links). Shape: (N, 2)."""
+-    asset: Articulation = env.scene[asset_cfg.name]
+-    foot_body_ids = asset.find_bodies(["ankle_pitch_l", "ankle_pitch_r"])[0]
+-    foot_pos = asset.data.body_pos_w[:, foot_body_ids, 2]
+-    return torch.clamp(foot_pos, min=-0.5, max=0.5) * 10.0
+-
+-
+-def base_height_obs(env: ManagerBasedRLEnv, asset_cfg: SceneEntityCfg = SceneEntityCfg("robot")) -> torch.Tensor:
+-    """Base height relative to 0.4m. Shape: (N, 1)."""
+-    asset: Articulation = env.scene[asset_cfg.name]
+-    return (asset.data.root_pos_w[:, [2]] - 0.4) * 10.0
+-
+-
+-def foot_vel_obs(env: ManagerBasedRLEnv, asset_cfg: SceneEntityCfg = SceneEntityCfg("robot")) -> torch.Tensor:
+-    """Foot linear velocities [vx_l, vy_l, vz_l, vx_r, vy_r, vz_r]. Shape: (N, 6)."""
+-    asset: Articulation = env.scene[asset_cfg.name]
+-    foot_body_ids = asset.find_bodies(["ankle_pitch_l", "ankle_pitch_r"])[0]
+-    foot_vel = asset.data.body_lin_vel_w[:, foot_body_ids, :]  # (N, 2, 3)
+-    return torch.clamp(foot_vel.reshape(-1, 6), min=-8.0, max=8.0) * 0.5
+-
+-
+-def base_acc_obs(env: ManagerBasedRLEnv, asset_cfg: SceneEntityCfg = SceneEntityCfg("robot")) -> torch.Tensor:
+-    """Base acceleration (approximated from velocity change). Shape: (N, 3)."""
+-    asset: Articulation = env.scene[asset_cfg.name]
+-    # Use body acceleration if available, otherwise approximate
+-    acc = asset.data.body_acc_w[:, 0, :3]
+-    return torch.clamp(acc, min=-20.0, max=20.0) * 0.2
+-
++def gait_phase_obs(env: ManagerBasedRLEnv) -> torch.Tensor:
++    """Return reference gait phase as [sin, cos]."""
+ 
+-def foot_force_obs(
+-    env: ManagerBasedRLEnv, sensor_cfg: SceneEntityCfg = SceneEntityCfg("contact_forces")
+-) -> torch.Tensor:
+-    """Foot contact forces. Shape: (N, 2)."""
+-    contact_sensor: ContactSensor = env.scene.sensors[sensor_cfg.name]
+-    forces = contact_sensor.data.net_forces_w[:, sensor_cfg.body_ids, :]
+-    force_norms = torch.norm(forces, dim=-1)
+-    return torch.clamp(force_norms, min=0.0, max=200.0) * 0.01
++    action_term = env.action_manager.get_term("joint_pos")
++    phase = getattr(action_term, "gait_phase", None)
++    if phase is None:
++        return torch.zeros(env.num_envs, 2, device=env.device)
++    angle = 2.0 * torch.pi * phase
++    return torch.stack([torch.sin(angle), torch.cos(angle)], dim=-1)
+diff --git a/Qmini/source/Qmini/Qmini/tasks/manager_based/qmini/mdp/rewards.py b/Qmini/source/Qmini/Qmini/tasks/manager_based/qmini/mdp/rewards.py
+index 9555343..dd12ee9 100644
+--- a/Qmini/source/Qmini/Qmini/tasks/manager_based/qmini/mdp/rewards.py
++++ b/Qmini/source/Qmini/Qmini/tasks/manager_based/qmini/mdp/rewards.py
+@@ -1,529 +1,179 @@
+-"""Custom reward functions for Qmini BIRL locomotion.
+-
+-All reward functions access shared state computed in the custom environment class
+-(QminiBIRLEnv) via env.birl_state dict. Each function returns a (num_envs,) tensor.
+-
+-Note: In Isaac Lab, the reward manager computes: function_return * weight * dt.
+-The source code applies per-term clipping clip(value * dt, -4, 5). We apply clipping
+-inside each function where the weight already includes the source weight, and let
+-Isaac Lab multiply by dt. Total reward clipping to min=0 is done in the env subclass.
+-"""
++"""Reward terms for the Qmini velocity walking task."""
+ 
+ from __future__ import annotations
+ 
+-import torch
+ from typing import TYPE_CHECKING
+ 
+-from isaaclab.assets import Articulation
++import torch
++
+ from isaaclab.managers import SceneEntityCfg
+ from isaaclab.sensors import ContactSensor
+-from isaaclab.utils.math import euler_xyz_from_quat
++from isaaclab.utils.math import quat_apply_inverse, yaw_quat
+ 
+ if TYPE_CHECKING:
+     from isaaclab.envs import ManagerBasedRLEnv
+ 
+ 
+-def _get_birl(env):
+-    """Get the BIRL action term."""
+-    return env.action_manager._terms["birl_action"]
+-
+-
+-def _get_shared(env):
+-    """Get shared BIRL state dict computed in env.step()."""
+-    return env.birl_state
+-
+-
+-# =============================================================================
+-# Reward functions
+-# =============================================================================
++def _yaw_frame_vel_x(env: ManagerBasedRLEnv, asset_cfg: SceneEntityCfg = SceneEntityCfg("robot")) -> torch.Tensor:
++    asset = env.scene[asset_cfg.name]
++    vel_yaw = quat_apply_inverse(yaw_quat(asset.data.root_quat_w), asset.data.root_lin_vel_w[:, :3])
++    return vel_yaw[:, 0]
+ 
+ 
+-def constant_reward(env: ManagerBasedRLEnv) -> torch.Tensor:
+-    """Constant reward = 1.0. Weight: 0.3."""
+-    return torch.ones(env.num_envs, device=env.device)
+-
+-
+-def base_height_reward(env: ManagerBasedRLEnv, asset_cfg: SceneEntityCfg = SceneEntityCfg("robot")) -> torch.Tensor:
+-    """Base height reward: exp(-70 * (z - 0.45)^2). Weight: 1.0 (included in computation)."""
+-    asset: Articulation = env.scene[asset_cfg.name]
+-    return torch.exp(-70.0 * (asset.data.root_pos_w[:, 2] - 0.45) ** 2)
+-
+-
+-def balance_reward(env: ManagerBasedRLEnv, asset_cfg: SceneEntityCfg = SceneEntityCfg("robot")) -> torch.Tensor:
+-    """Balance reward combining height and orientation. Weight: 1.5."""
+-    s = _get_shared(env)
+-    return s["balance_rew"].squeeze(-1)
+-
+-
+-def forward_velocity_reward(
+-    env: ManagerBasedRLEnv, asset_cfg: SceneEntityCfg = SceneEntityCfg("robot")
++def track_lin_vel_x_yaw_frame_exp(
++    env: ManagerBasedRLEnv,
++    command_name: str,
++    std: float,
++    asset_cfg: SceneEntityCfg = SceneEntityCfg("robot"),
+ ) -> torch.Tensor:
+-    """Forward velocity tracking. Weight: 2.3."""
+-    s = _get_shared(env)
+-    asset: Articulation = env.scene[asset_cfg.name]
+-    commands = env.command_manager.get_command("base_velocity")
+-    lin_vel_x_norm = s["lin_vel_x_norm"]
+-    return torch.exp(
+-        -torch.clamp(5.0 / lin_vel_x_norm, min=2.0, max=10.0) * (commands[:, [0]] - asset.data.root_lin_vel_b[:, [0]]) ** 2
+-    ).squeeze(-1)
++    cmd_x = env.command_manager.get_command(command_name)[:, 0]
++    vel_x = _yaw_frame_vel_x(env, asset_cfg)
++    return torch.exp(-((vel_x - cmd_x) ** 2) / (2.0 * std**2))
+ 
+ 
+-def lateral_velocity_reward(
++def forward_progress_yaw_frame(
+     env: ManagerBasedRLEnv, asset_cfg: SceneEntityCfg = SceneEntityCfg("robot")
+ ) -> torch.Tensor:
+-    """Lateral velocity penalty. Weight: 0.7."""
+-    s = _get_shared(env)
+-    asset: Articulation = env.scene[asset_cfg.name]
+-    lin_vel_x_norm = s["lin_vel_x_norm"]
+-    static_flag = s["static_flag"]
+-    rew = torch.exp(
+-        -torch.clamp(5.0 / lin_vel_x_norm, min=3.0, max=15.0) * torch.norm(asset.data.root_lin_vel_b[:, [1]], dim=1, keepdim=True) ** 2
+-    )
+-    rew += -0.6 / lin_vel_x_norm * torch.norm(asset.data.root_lin_vel_b[:, [1]], dim=1, keepdim=True) * static_flag
+-    return rew.squeeze(-1)
+-
+-
+-def yaw_rate_reward(env: ManagerBasedRLEnv, asset_cfg: SceneEntityCfg = SceneEntityCfg("robot")) -> torch.Tensor:
+-    """Yaw rate tracking. Weight: 2.5."""
+-    s = _get_shared(env)
+-    asset: Articulation = env.scene[asset_cfg.name]
+-    commands = env.command_manager.get_command("base_velocity")
+-    yaw_rate_norm = s["yaw_rate_norm"]
+-    return torch.exp(
+-        -torch.clamp(2.0 / yaw_rate_norm, min=2.0, max=6.0) * (commands[:, [2]] - asset.data.root_ang_vel_b[:, [2]]) ** 2
+-    ).squeeze(-1)
++    return torch.clamp(_yaw_frame_vel_x(env, asset_cfg), min=0.0)
+ 
+ 
+-def angular_velocity_reward(
++def backward_velocity_penalty_yaw_frame(
+     env: ManagerBasedRLEnv, asset_cfg: SceneEntityCfg = SceneEntityCfg("robot")
+ ) -> torch.Tensor:
+-    """Angular velocity (roll/pitch) penalty. Weight: 0.6."""
+-    s = _get_shared(env)
+-    asset: Articulation = env.scene[asset_cfg.name]
+-    lin_vel_x_norm = s["lin_vel_x_norm"]
+-    return torch.exp(
+-        -torch.clamp(2.0 / lin_vel_x_norm, min=0.7, max=6.0) * torch.norm(asset.data.root_ang_vel_b[:, :2], dim=1, keepdim=True) ** 2
+-    ).squeeze(-1)
++    return torch.clamp(-_yaw_frame_vel_x(env, asset_cfg), min=0.0)
+ 
+ 
+-def vertical_velocity_reward(
+-    env: ManagerBasedRLEnv, asset_cfg: SceneEntityCfg = SceneEntityCfg("robot")
++def stall_penalty_yaw_frame(
++    env: ManagerBasedRLEnv,
++    command_name: str,
++    threshold: float,
++    asset_cfg: SceneEntityCfg = SceneEntityCfg("robot"),
+ ) -> torch.Tensor:
+-    """Vertical velocity penalty. Weight: 0.6."""
+-    s = _get_shared(env)
+-    asset: Articulation = env.scene[asset_cfg.name]
+-    lin_vel_x_norm = s["lin_vel_x_norm"]
+-    static_flag = s["static_flag"]
+-    rew = torch.exp(
+-        -torch.clamp(5.0 / lin_vel_x_norm, min=2.0, max=10.0) * torch.norm(asset.data.root_lin_vel_b[:, [2]], dim=1, keepdim=True) ** 2
+-    )
+-    rew -= 0.2 / lin_vel_x_norm * torch.norm(asset.data.root_lin_vel_b[:, 1:], dim=1, keepdim=True) * static_flag
+-    return rew.squeeze(-1)
++    cmd_x = env.command_manager.get_command(command_name)[:, 0]
++    vel_x = torch.clamp(_yaw_frame_vel_x(env, asset_cfg), min=0.0)
++    return torch.clamp(threshold - vel_x, min=0.0) * (cmd_x > 0.01).float()
+ 
+ 
+-def twist_reward(env: ManagerBasedRLEnv, asset_cfg: SceneEntityCfg = SceneEntityCfg("robot")) -> torch.Tensor:
+-    """Twist (body orientation) penalty. Weight: 2.5."""
+-    asset: Articulation = env.scene[asset_cfg.name]
+-    roll, pitch, _ = euler_xyz_from_quat(asset.data.root_quat_w)
+-    euler_rp = torch.stack([roll, pitch], dim=1)
+-    return -torch.norm(euler_rp, dim=-1)
++def upright_reward(env: ManagerBasedRLEnv, asset_cfg: SceneEntityCfg = SceneEntityCfg("robot")) -> torch.Tensor:
++    asset = env.scene[asset_cfg.name]
++    tilt_sq = asset.data.projected_gravity_b[:, 0] ** 2 + asset.data.projected_gravity_b[:, 1] ** 2
++    return torch.exp(-4.0 * tilt_sq)
+ 
+ 
+-def base_acceleration_reward(
+-    env: ManagerBasedRLEnv, asset_cfg: SceneEntityCfg = SceneEntityCfg("robot")
+-) -> torch.Tensor:
+-    """Base acceleration penalty. Weight: 0.1 * balance_rew."""
+-    s = _get_shared(env)
+-    asset: Articulation = env.scene[asset_cfg.name]
+-    lin_vel_x_norm = s["lin_vel_x_norm"]
+-    static_flag = s["static_flag"]
+-    balance_rew = s["balance_rew"]
+-    gravity_comp = torch.tensor([0, 0, 9.81], device=env.device)
+-    acc = asset.data.body_acc_w[:, 0, :3]
+-    rew = -0.4 / lin_vel_x_norm * torch.norm((acc - gravity_comp) * 0.1, dim=1, keepdim=True) * static_flag
+-    return (rew * balance_rew).squeeze(-1)
+-
+-
+-def foot_clearance_reward(
++def height_reward(
+     env: ManagerBasedRLEnv,
+-    sensor_cfg: SceneEntityCfg = SceneEntityCfg("contact_forces"),
++    target_height: float,
++    asset_cfg: SceneEntityCfg = SceneEntityCfg("robot"),
+ ) -> torch.Tensor:
+-    """Foot clearance: swing feet should be off ground. Weight: 1.0."""
+-    s = _get_shared(env)
+-    birl = _get_birl(env)
+-    contact_sensor: ContactSensor = env.scene.sensors[sensor_cfg.name]
+-    forces = contact_sensor.data.net_forces_w[:, sensor_cfg.body_ids, :]
+-    foot_frc = torch.norm(forces, dim=-1)
+-    swing_foot_index = foot_frc < 1.0
+-    static_flag = s["static_flag"]
+-    rew = torch.sum(
+-        torch.logical_and(swing_foot_index, birl.foot_swing_mask).float(), dim=1, keepdim=True
+-    ) / birl.num_legs
+-    return (rew * static_flag).squeeze(-1)
++    asset = env.scene[asset_cfg.name]
++    return torch.exp(-18.0 * (asset.data.root_pos_w[:, 2] - target_height) ** 2)
+ 
+ 
+-def foot_support_reward(
++def hip_alternation_reward(
+     env: ManagerBasedRLEnv,
+-    sensor_cfg: SceneEntityCfg = SceneEntityCfg("contact_forces"),
++    left_hip_name: str,
++    right_hip_name: str,
++    target_separation: float,
++    antiphase_sigma: float,
++    asset_cfg: SceneEntityCfg = SceneEntityCfg("robot"),
+ ) -> torch.Tensor:
+-    """Foot support: stance feet should be on ground. Weight: 0.7."""
+-    s = _get_shared(env)
+-    birl = _get_birl(env)
+-    contact_sensor: ContactSensor = env.scene.sensors[sensor_cfg.name]
+-    forces = contact_sensor.data.net_forces_w[:, sensor_cfg.body_ids, :]
+-    foot_frc = torch.norm(forces, dim=-1)
+-    support_foot_index = foot_frc >= 10.0
+-    static_flag = s["static_flag"]
+-    rew = torch.sum(
+-        torch.logical_and(support_foot_index, birl.foot_support_mask).float(), dim=1, keepdim=True
+-    ) / birl.num_legs
+-    return (rew * static_flag).squeeze(-1)
++    asset = env.scene[asset_cfg.name]
++    left_idx = asset.data.joint_names.index(left_hip_name)
++    right_idx = asset.data.joint_names.index(right_hip_name)
++    left = asset.data.joint_pos[:, left_idx]
++    right = -asset.data.joint_pos[:, right_idx]
++    separation = torch.abs(left - right)
++    separation_reward = torch.clamp(separation / target_separation, max=1.0)
++    antiphase_reward = torch.exp(-((left + right) ** 2) / (2.0 * antiphase_sigma**2))
++    return separation_reward * antiphase_reward
+ 
+ 
+-def foot_height_reward(
++def knee_flexion_reward(
+     env: ManagerBasedRLEnv,
++    left_knee_name: str,
++    right_knee_name: str,
++    target: float,
++    sigma: float,
+     asset_cfg: SceneEntityCfg = SceneEntityCfg("robot"),
+-    sensor_cfg: SceneEntityCfg = SceneEntityCfg("contact_forces"),
+ ) -> torch.Tensor:
+-    """Foot height reward for swing phase. Weight: 0.7."""
+-    s = _get_shared(env)
+-    birl = _get_birl(env)
+-    asset: Articulation = env.scene[asset_cfg.name]
+-    static_flag = s["static_flag"]
+-    contact_sensor: ContactSensor = env.scene.sensors[sensor_cfg.name]
+-    forces = contact_sensor.data.net_forces_w[:, sensor_cfg.body_ids, :]
+-    foot_frc = torch.norm(forces, dim=-1)
+-    support_foot_index = foot_frc >= 10.0
++    asset = env.scene[asset_cfg.name]
++    left_idx = asset.data.joint_names.index(left_knee_name)
++    right_idx = asset.data.joint_names.index(right_knee_name)
++    left = torch.abs(asset.data.joint_pos[:, left_idx])
++    right = torch.abs(asset.data.joint_pos[:, right_idx])
++    return torch.exp(-((0.5 * (left + right) - target) ** 2) / (2.0 * sigma**2))
+ 
+-    foot_body_ids = asset.find_bodies(["ankle_pitch_l", "ankle_pitch_r"])[0]
+-    foot_height = asset.data.body_pos_w[:, foot_body_ids, 2]
+ 
+-    foot_heit_score = 40.0 * torch.clamp(foot_height, min=0.0, max=0.05)
+-    rew = torch.sum(birl.foot_swing_mask * foot_heit_score, dim=1, keepdim=True).clamp(max=2.0) * static_flag
+-    rew += -20.0 * torch.sum((foot_height - 0.06).clamp(min=0.0), dim=1, keepdim=True)
+-    rew += -0.2 * torch.sum(birl.foot_support_mask * foot_heit_score, dim=1, keepdim=True) * static_flag
+-    rew += -0.2 * torch.sum(support_foot_index * foot_heit_score, dim=1, keepdim=True) * static_flag
+-    return rew.squeeze(-1)
+-
+-
+-def foot_soft_contact_reward(
++def knee_symmetry_penalty(
+     env: ManagerBasedRLEnv,
+-    sensor_cfg: SceneEntityCfg = SceneEntityCfg("contact_forces"),
++    left_knee_name: str,
++    right_knee_name: str,
++    asset_cfg: SceneEntityCfg = SceneEntityCfg("robot"),
+ ) -> torch.Tensor:
+-    """Smooth foot contact forces. Weight: 2.7 * balance_rew."""
+-    s = _get_shared(env)
+-    birl = _get_birl(env)
+-    lin_vel_x_norm = s["lin_vel_x_norm"]
+-    balance_rew = s["balance_rew"]
++    asset = env.scene[asset_cfg.name]
++    left_idx = asset.data.joint_names.index(left_knee_name)
++    right_idx = asset.data.joint_names.index(right_knee_name)
++    return torch.square(asset.data.joint_pos[:, left_idx] + asset.data.joint_pos[:, right_idx])
+ 
+-    contact_sensor: ContactSensor = env.scene.sensors[sensor_cfg.name]
+-    forces = contact_sensor.data.net_forces_w[:, sensor_cfg.body_ids, :]
+-    foot_frc = torch.norm(forces, dim=-1)
+ 
+-    foot_frc_acc = foot_frc - birl.last_foot_frc
+-    rew = -0.1 * torch.clamp(1.0 / lin_vel_x_norm, min=0.0, max=1.5) * torch.norm(foot_frc_acc, dim=1, keepdim=True) / 100.0
+-
+-    # Update last foot force
+-    birl.last_foot_frc = foot_frc.clone().detach()
+-
+-    return (rew * balance_rew).squeeze(-1)
+-
+-
+-def feet_contact_force_reward(
++def hip_symmetry_penalty(
+     env: ManagerBasedRLEnv,
+-    sensor_cfg: SceneEntityCfg = SceneEntityCfg("contact_forces"),
++    left_hip_name: str,
++    right_hip_name: str,
++    asset_cfg: SceneEntityCfg = SceneEntityCfg("robot"),
+ ) -> torch.Tensor:
+-    """Contact force penalty. Weight: 0.001."""
+-    s = _get_shared(env)
+-    birl = _get_birl(env)
+-    static_flag = s["static_flag"]
++    asset = env.scene[asset_cfg.name]
++    left_idx = asset.data.joint_names.index(left_hip_name)
++    right_idx = asset.data.joint_names.index(right_hip_name)
++    return torch.square(asset.data.joint_pos[:, left_idx] + asset.data.joint_pos[:, right_idx])
+ 
+-    contact_sensor: ContactSensor = env.scene.sensors[sensor_cfg.name]
+-    forces = contact_sensor.data.net_forces_w[:, sensor_cfg.body_ids, :]
+-    foot_frc = torch.norm(forces, dim=-1)
+-    support_foot_index = foot_frc >= 10.0
+-
+-    rew = -torch.norm(foot_frc * birl.foot_swing_mask, dim=1, keepdim=True) * static_flag
+-    rew += -torch.norm((torch.abs(foot_frc - 55.0) * support_foot_index).clamp(min=0.0), dim=1, keepdim=True)
+-    return rew.squeeze(-1)
+ 
+-
+-def foot_slip_reward(
++def feet_air_time_positive_biped(
+     env: ManagerBasedRLEnv,
+-    asset_cfg: SceneEntityCfg = SceneEntityCfg("robot"),
+-    sensor_cfg: SceneEntityCfg = SceneEntityCfg("contact_forces"),
++    command_name: str,
++    threshold: float,
++    sensor_cfg: SceneEntityCfg,
+ ) -> torch.Tensor:
+-    """Foot slip penalty. Weight: 0.5 * balance_rew."""
+-    s = _get_shared(env)
+-    birl = _get_birl(env)
+-    asset: Articulation = env.scene[asset_cfg.name]
+-    lin_vel_x_norm = s["lin_vel_x_norm"]
+-    static_flag = s["static_flag"]
+-    balance_rew = s["balance_rew"]
+-    commands = env.command_manager.get_command("base_velocity")
+-
+-    foot_body_ids = asset.find_bodies(["ankle_pitch_l", "ankle_pitch_r"])[0]
+-    foot_vel = asset.data.body_lin_vel_w[:, foot_body_ids, :]  # (N, 2, 3)
+-    foot_height = asset.data.body_pos_w[:, foot_body_ids, 2]
+-    clip_foot_h = torch.abs(foot_height) + 0.03
+-
+-    # Swing foot forward velocity bonus
+-    rew = 2.0 * (lin_vel_x_norm * torch.sum(
+-        foot_vel[:, :, 0] * commands[:, [0]].sign() * birl.foot_swing_mask, dim=1, keepdim=True
+-    )).clamp(min=0.0, max=1.0) * static_flag
++    contact_sensor: ContactSensor = env.scene.sensors[sensor_cfg.name]
++    air_time = contact_sensor.data.current_air_time[:, sensor_cfg.body_ids]
++    contact_time = contact_sensor.data.current_contact_time[:, sensor_cfg.body_ids]
++    in_contact = contact_time > 0.0
++    in_mode_time = torch.where(in_contact, contact_time, air_time)
++    single_stance = torch.sum(in_contact.int(), dim=1) == 1
++    reward = torch.min(torch.where(single_stance.unsqueeze(-1), in_mode_time, 0.0), dim=1)[0]
++    reward = torch.clamp(reward, max=threshold)
++    reward *= torch.norm(env.command_manager.get_command(command_name)[:, :2], dim=1) > 0.1
++    return reward
+ 
+-    # Lateral velocity penalty
+-    rew += -0.5 * torch.norm(torch.norm(foot_vel[:, :, [1]], dim=-1), dim=1, keepdim=True) * static_flag
+ 
+-    # Static foot movement penalty
+-    foot_vel_xy = torch.norm(foot_vel[:, :, :2], dim=-1)
+-    rew += 0.3 * torch.norm(foot_vel_xy, dim=1, keepdim=True) * (static_flag - 1.0)
++def lin_vel_y_l2(env: ManagerBasedRLEnv, asset_cfg: SceneEntityCfg = SceneEntityCfg("robot")) -> torch.Tensor:
++    asset = env.scene[asset_cfg.name]
++    return torch.square(asset.data.root_lin_vel_b[:, 1])
+ 
+-    # Support foot slip penalty
+-    rew += -0.3 / lin_vel_x_norm * torch.norm(
+-        0.1 * foot_vel_xy / clip_foot_h * birl.foot_support_mask, dim=1, keepdim=True
+-    ) * static_flag
+ 
+-    return (rew * balance_rew).squeeze(-1)
++def ang_vel_z_l2(env: ManagerBasedRLEnv, asset_cfg: SceneEntityCfg = SceneEntityCfg("robot")) -> torch.Tensor:
++    asset = env.scene[asset_cfg.name]
++    return torch.square(asset.data.root_ang_vel_b[:, 2])
+ 
+ 
+-def foot_vertical_velocity_reward(
++def feet_slide(
+     env: ManagerBasedRLEnv,
++    sensor_cfg: SceneEntityCfg,
+     asset_cfg: SceneEntityCfg = SceneEntityCfg("robot"),
+ ) -> torch.Tensor:
+-    """Foot vertical velocity penalty. Weight: 0.2 * balance_rew."""
+-    s = _get_shared(env)
+-    birl = _get_birl(env)
+-    asset: Articulation = env.scene[asset_cfg.name]
+-    lin_vel_x_norm = s["lin_vel_x_norm"]
+-    static_flag = s["static_flag"]
+-    balance_rew = s["balance_rew"]
+-
+-    foot_body_ids = asset.find_bodies(["ankle_pitch_l", "ankle_pitch_r"])[0]
+-    foot_vel = asset.data.body_lin_vel_w[:, foot_body_ids, :]  # (N, 2, 3)
+-    foot_height = asset.data.body_pos_w[:, foot_body_ids, 2]
+-    clip_foot_h = torch.abs(foot_height) + 0.03
+-
+-    foot_vz = foot_vel[:, :, 2].clamp(max=0.0)  # Only negative (downward)
+-    rew = -0.1 * torch.clamp(1.0 / lin_vel_x_norm, min=0.0, max=1.0) * torch.norm(
+-        torch.norm(foot_vz.unsqueeze(-1), dim=-1) / clip_foot_h, dim=1, keepdim=True
+-    ) * static_flag
+-    rew += 0.8 * torch.clamp(1.0 / lin_vel_x_norm, min=0.0, max=1.0) * torch.norm(
+-        torch.norm(foot_vz.unsqueeze(-1), dim=-1), dim=1, keepdim=True
+-    ) * (static_flag - 1.0)
+-
+-    return (rew * balance_rew).squeeze(-1)
+-
+-
+-def foot_acceleration_reward(
+-    env: ManagerBasedRLEnv,
+-    asset_cfg: SceneEntityCfg = SceneEntityCfg("robot"),
+-) -> torch.Tensor:
+-    """Foot acceleration penalty. Weight: 0.05 * balance_rew."""
+-    s = _get_shared(env)
+-    asset: Articulation = env.scene[asset_cfg.name]
+-    lin_vel_x_norm = s["lin_vel_x_norm"]
+-    balance_rew = s["balance_rew"]
+-
+-    foot_body_ids = asset.find_bodies(["ankle_pitch_l", "ankle_pitch_r"])[0]
+-    foot_vel = asset.data.body_lin_vel_w[:, foot_body_ids, :]
+-    foot_vz = foot_vel[:, :, 2]  # (N, 2)
+-
+-    rew = -0.4 * torch.clamp(1.0 / lin_vel_x_norm, min=0.0, max=2.0) * torch.norm(foot_vz, dim=1, keepdim=True)
+-    return (rew * balance_rew).squeeze(-1)
+-
+-
+-def action_smoothness_reward(env: ManagerBasedRLEnv) -> torch.Tensor:
+-    """Action smoothness (jerk penalty). Weight: 1.5 * balance_rew."""
+-    s = _get_shared(env)
+-    birl = _get_birl(env)
+-    lin_vel_x_norm = s["lin_vel_x_norm"]
+-    balance_rew = s["balance_rew"]
+-    hist = birl.action_history
+-    jerk = hist[-3] - 2.0 * hist[-2] + hist[-1]
+-    rew = -0.3 * torch.clamp(1.0 / lin_vel_x_norm, min=0.0, max=2.0) * torch.norm(jerk, dim=1, keepdim=True)
+-    return (rew * balance_rew).squeeze(-1)
+-
+-
+-def net_out_smoothness_reward(env: ManagerBasedRLEnv) -> torch.Tensor:
+-    """Network output smoothness. Weight: 0.001 * balance_rew."""
+-    s = _get_shared(env)
+-    birl = _get_birl(env)
+-    lin_vel_x_norm = s["lin_vel_x_norm"]
+-    balance_rew = s["balance_rew"]
+-    hist = birl.net_out_history
+-    jerk = (hist[-3] - 2.0 * hist[-2] + hist[-1])[:, birl.num_legs:]
+-    rew = -0.2 * torch.clamp(1.0 / lin_vel_x_norm, min=0.0, max=2.0) * torch.norm(jerk, dim=1, keepdim=True) ** 2
+-    return (rew * balance_rew).squeeze(-1)
+-
+-
+-def action_constraint_reward(
+-    env: ManagerBasedRLEnv, asset_cfg: SceneEntityCfg = SceneEntityCfg("robot")
+-) -> torch.Tensor:
+-    """Action constraint: penalize deviation from reference. Weight: 0.2 * balance_rew."""
+-    s = _get_shared(env)
+-    birl = _get_birl(env)
+-    lin_vel_x_norm = s["lin_vel_x_norm"]
+-    static_flag = s["static_flag"]
+-    balance_rew = s["balance_rew"]
+-    diff = birl.current_joint_target - birl.ref_joint_pos
+-    rew = -0.1 * torch.clamp(1.0 / lin_vel_x_norm, min=0.0, max=1.0) * torch.norm(diff, dim=1, keepdim=True)
+-    rew += -3.0 * torch.norm(diff[:, [0, 1, 5, 6]], dim=1, keepdim=True) * static_flag
+-    return (rew * balance_rew).squeeze(-1)
+-
+-
+-def support_ankle_constraint_reward(
+-    env: ManagerBasedRLEnv,
+-    asset_cfg: SceneEntityCfg = SceneEntityCfg("robot"),
+-    sensor_cfg: SceneEntityCfg = SceneEntityCfg("contact_forces"),
+-) -> torch.Tensor:
+-    """Support ankle constraint. Weight: 0.1 * balance_rew."""
+-    s = _get_shared(env)
+-    birl = _get_birl(env)
+-    asset: Articulation = env.scene[asset_cfg.name]
+-    lin_vel_x_norm = s["lin_vel_x_norm"]
+-    static_flag = s["static_flag"]
+-    balance_rew = s["balance_rew"]
+-
+     contact_sensor: ContactSensor = env.scene.sensors[sensor_cfg.name]
+-    forces = contact_sensor.data.net_forces_w[:, sensor_cfg.body_ids, :]
+-    foot_frc = torch.norm(forces, dim=-1)
+-    support_foot_index = foot_frc >= 10.0
+-
+-    diff = birl.current_joint_target - birl.ref_joint_pos
+-    rew = -0.1 * torch.clamp(1.0 / lin_vel_x_norm, min=0.0, max=1.0) * torch.norm(diff, dim=1, keepdim=True) ** 2 * static_flag
+-    # Left leg support constraint
+-    diff_joints = asset.data.joint_pos - birl.ref_joint_pos
+-    rew += -static_flag * torch.clamp(1.0 / lin_vel_x_norm, min=0.0, max=1.0) * torch.norm(
+-        diff_joints[:, :5] * support_foot_index[:, [0]], dim=1, keepdim=True
+-    ) ** 2
+-    # Right leg support constraint
+-    rew += -static_flag * torch.clamp(1.0 / lin_vel_x_norm, min=0.0, max=1.0) * torch.norm(
+-        diff_joints[:, 5:] * support_foot_index[:, [1]], dim=1, keepdim=True
+-    ) ** 2
+-    return (rew * balance_rew).squeeze(-1)
+-
+-
+-def joint_pos_error_reward(
+-    env: ManagerBasedRLEnv, asset_cfg: SceneEntityCfg = SceneEntityCfg("robot")
+-) -> torch.Tensor:
+-    """Joint position tracking error. Weight: 0.2 * balance_rew."""
+-    s = _get_shared(env)
+-    birl = _get_birl(env)
+-    asset: Articulation = env.scene[asset_cfg.name]
+-    lin_vel_x_norm = s["lin_vel_x_norm"]
+-    balance_rew = s["balance_rew"]
+-    rew = -0.4 * torch.clamp(1.0 / lin_vel_x_norm, min=0.0, max=1.0) * torch.norm(
+-        birl.current_joint_target - asset.data.joint_pos, dim=1, keepdim=True
+-    ) ** 2
+-    return (rew * balance_rew).squeeze(-1)
+-
+-
+-def joint_velocity_reward(
+-    env: ManagerBasedRLEnv, asset_cfg: SceneEntityCfg = SceneEntityCfg("robot")
+-) -> torch.Tensor:
+-    """Joint velocity penalty. Weight: 0.003 * balance_rew."""
+-    s = _get_shared(env)
+-    asset: Articulation = env.scene[asset_cfg.name]
+-    lin_vel_x_norm = s["lin_vel_x_norm"]
+-    balance_rew = s["balance_rew"]
+-    rew = -0.4 * torch.clamp(1.0 / lin_vel_x_norm, min=0.0, max=1.0) * torch.norm(
+-        asset.data.joint_vel, dim=1, keepdim=True
+-    ) ** 2
+-    rew += -torch.clamp(1.0 / lin_vel_x_norm, min=0.0, max=1.0) * torch.norm(
+-        asset.data.joint_vel[:, [0, 1, 5, 6]], dim=1, keepdim=True
+-    ) ** 2
+-    return (rew * balance_rew).squeeze(-1)
+-
+-
+-def joint_torque_reward(
+-    env: ManagerBasedRLEnv, asset_cfg: SceneEntityCfg = SceneEntityCfg("robot")
+-) -> torch.Tensor:
+-    """Joint torque exceeding limit penalty. Weight: 0.001."""
+-    s = _get_shared(env)
+-    asset: Articulation = env.scene[asset_cfg.name]
+-    lin_vel_x_norm = s["lin_vel_x_norm"]
+-    static_flag = s["static_flag"]
+-    torque_limits = torch.tensor(
+-        [20.0, 60.0, 20.0, 20.0, 20.0, 20.0, 60.0, 20.0, 20.0, 20.0],
+-        device=env.device,
++    contacts = (
++        contact_sensor.data.net_forces_w_history[:, :, sensor_cfg.body_ids, :].norm(dim=-1).max(dim=1)[0] > 1.0
+     )
+-    applied_torque = asset.data.applied_torque
+-    rew = -0.4 * torch.clamp(1.0 / lin_vel_x_norm, min=0.0, max=2.0) * torch.sum(
+-        (torch.abs(applied_torque) - torque_limits).clamp(min=0.0), dim=1, keepdim=True
+-    )
+-    return (rew * static_flag).squeeze(-1)
+-
+-
+-def phase_freq_reward(env: ManagerBasedRLEnv) -> torch.Tensor:
+-    """Phase modulator frequency smoothness. Weight: 0.03 * balance_rew."""
+-    s = _get_shared(env)
+-    birl = _get_birl(env)
+-    lin_vel_x_norm = s["lin_vel_x_norm"]
+-    static_flag = s["static_flag"]
+-    balance_rew = s["balance_rew"]
+-    hist = birl.net_out_history
+-    freq_jerk = (hist[-3] - 2.0 * hist[-2] + hist[-1])[:, :birl.num_legs]
+-
+-    rew = -0.02 * torch.clamp(1.0 / lin_vel_x_norm, min=0.0, max=1.0) * torch.norm(freq_jerk, dim=1, keepdim=True)
+-    rew += -0.5 * torch.clamp(1.0 / lin_vel_x_norm, min=0.0, max=1.0) * torch.norm(
+-        hist[-1][:, :birl.num_legs] * birl.foot_support_mask, dim=1, keepdim=True
+-    ) ** 2
+-    return (rew * static_flag * balance_rew).squeeze(-1)
+-
+-
+-def net_out_value_reward(env: ManagerBasedRLEnv) -> torch.Tensor:
+-    """Network output magnitude regularization. Weight: 0.0001 * balance_rew."""
+-    s = _get_shared(env)
+-    birl = _get_birl(env)
+-    lin_vel_x_norm = s["lin_vel_x_norm"]
+-    balance_rew = s["balance_rew"]
+-    rew = -0.4 * torch.clamp(1.0 / lin_vel_x_norm, min=0.0, max=1.0) * torch.norm(
+-        birl.net_out_history[-1][:, birl.num_legs:], dim=1, keepdim=True
+-    ) ** 2
+-    return (rew * balance_rew).squeeze(-1)
+-
+-
+-def foot_pitch_reward(
+-    env: ManagerBasedRLEnv, asset_cfg: SceneEntityCfg = SceneEntityCfg("robot")
+-) -> torch.Tensor:
+-    """Foot pitch angle penalty. Weight: 0.5 * balance_rew."""
+-    s = _get_shared(env)
+-    asset: Articulation = env.scene[asset_cfg.name]
+-    balance_rew = s["balance_rew"]
+-    foot_body_ids = asset.find_bodies(["ankle_pitch_l", "ankle_pitch_r"])[0]
+-    foot_quat = asset.data.body_quat_w[:, foot_body_ids, :]  # (N, 2, 4)
+-    # Extract pitch from each foot quaternion
+-    _, pitch_l, _ = euler_xyz_from_quat(foot_quat[:, 0, :])
+-    _, pitch_r, _ = euler_xyz_from_quat(foot_quat[:, 1, :])
+-    foot_pitch = torch.stack([pitch_l, pitch_r], dim=1)
+-    rew = -0.5 * torch.norm(foot_pitch, dim=1, keepdim=True)
+-    return (rew * balance_rew).squeeze(-1)
+-
+-
+-def leg_width_reward(
+-    env: ManagerBasedRLEnv, asset_cfg: SceneEntityCfg = SceneEntityCfg("robot")
++    asset = env.scene[asset_cfg.name]
++    foot_vel_xy = asset.data.body_lin_vel_w[:, sensor_cfg.body_ids, :2]
++    return torch.sum(foot_vel_xy.norm(dim=-1) * contacts, dim=1)
++
++
++def base_height_below_threshold(
++    env: ManagerBasedRLEnv,
++    minimum_height: float,
++    asset_cfg: SceneEntityCfg = SceneEntityCfg("robot"),
+ ) -> torch.Tensor:
+-    """Leg width maintenance (target 0.14m). Weight: 0.5 * balance_rew."""
+-    s = _get_shared(env)
+-    asset: Articulation = env.scene[asset_cfg.name]
+-    balance_rew = s["balance_rew"]
+-    foot_body_ids = asset.find_bodies(["ankle_pitch_l", "ankle_pitch_r"])[0]
+-    foot_y = asset.data.body_pos_w[:, foot_body_ids, 1]  # (N, 2)
+-    base_y = asset.data.root_pos_w[:, 1:2]  # (N, 1)
+-    rew = -torch.norm(torch.abs(foot_y - base_y) - 0.14, dim=1, keepdim=True)
+-    return (rew * balance_rew).squeeze(-1)
+-
+-
+-def foot_phase_coordination_reward(env: ManagerBasedRLEnv) -> torch.Tensor:
+-    """Biped anti-phase gait coordination. Weight: 0.3 * balance_rew."""
+-    s = _get_shared(env)
+-    birl = _get_birl(env)
+-    static_flag = s["static_flag"]
+-    balance_rew = s["balance_rew"]
+-    phase = birl.foot_phase.clone()
+-    lsin = torch.sin(phase)
+-    lcos = torch.cos(phase)
+-    rew = -torch.norm(lsin[:, [0]] + lsin[:, [1]], dim=1, keepdim=True) ** 2
+-    rew += -torch.norm(lcos[:, [0]] + lcos[:, [1]], dim=1, keepdim=True) ** 2
+-    return (rew * static_flag * balance_rew).squeeze(-1)
++    asset = env.scene[asset_cfg.name]
++    return asset.data.root_pos_w[:, 2] < minimum_height
+diff --git a/Qmini/source/Qmini/Qmini/tasks/manager_based/qmini/qmini_env.py b/Qmini/source/Qmini/Qmini/tasks/manager_based/qmini/qmini_env.py
+index e524554..4b0b0f7 100644
+--- a/Qmini/source/Qmini/Qmini/tasks/manager_based/qmini/qmini_env.py
++++ b/Qmini/source/Qmini/Qmini/tasks/manager_based/qmini/qmini_env.py
+@@ -1,116 +1,9 @@
+-"""Custom ManagerBasedRLEnv subclass for Qmini BIRL locomotion.
++"""Qmini manager-based walking environment."""
+ 
+-Computes shared state (balance_rew, static_flag, normalization factors)
+-that multiple reward terms need access to, avoiding redundant computation.
+-"""
++from isaaclab.envs import ManagerBasedRLEnv
+ 
+-from __future__ import annotations
+ 
+-import torch
++class QminiWalkEnv(ManagerBasedRLEnv):
++    """Thin environment subclass for the Qmini velocity walking task."""
+ 
+-from isaaclab.envs import ManagerBasedRLEnv, ManagerBasedRLEnvCfg
+-from isaaclab.utils.math import euler_xyz_from_quat
+-
+-
+-class QminiBIRLEnv(ManagerBasedRLEnv):
+-    """Qmini BIRL locomotion environment with shared reward state."""
+-
+-    def __init__(self, cfg: ManagerBasedRLEnvCfg, render_mode: str | None = None, **kwargs):
+-        super().__init__(cfg, render_mode=render_mode, **kwargs)
+-        # Initialize shared state dict
+-        self.birl_state = {}
+-
+-    def _compute_shared_state(self):
+-        """Compute shared quantities used by multiple reward functions."""
+-        commands = self.command_manager.get_command("base_velocity")
+-        robot = self.scene["robot"]
+-
+-        # Command normalization factors
+-        lin_vel_x_norm = torch.clamp(torch.abs(commands[:, [0]]), min=0.3, max=2.0) + 0.2
+-        yaw_rate_norm = torch.clamp(torch.abs(commands[:, [2]]), min=0.3, max=1.5) + 0.2
+-
+-        # Static flag: 0 when command is near zero, 1 otherwise
+-        cmd_norm = torch.norm(commands[:, :3], dim=1, keepdim=True)
+-        static_flag = (cmd_norm >= 0.15).float()
+-
+-        # Base height reward component
+-        base_heit_rew = torch.exp(-70.0 * (robot.data.root_pos_w[:, [2]] - 0.45) ** 2)
+-
+-        # Balance reward: combines height + orientation
+-        roll, pitch, _ = euler_xyz_from_quat(robot.data.root_quat_w)
+-        euler_rp = torch.stack([roll, pitch], dim=1)
+-        balance_rew = 0.5 * (
+-            base_heit_rew * torch.exp(
+-                -torch.clamp(5.0 / lin_vel_x_norm, min=2.0, max=8.0) * torch.norm(euler_rp, dim=-1, keepdim=True)
+-            ) + 1.0
+-        )
+-
+-        self.birl_state = {
+-            "lin_vel_x_norm": lin_vel_x_norm,
+-            "yaw_rate_norm": yaw_rate_norm,
+-            "static_flag": static_flag,
+-            "base_heit_rew": base_heit_rew,
+-            "balance_rew": balance_rew,
+-        }
+-
+-    def step(self, action: torch.Tensor):
+-        """Override step to compute shared state before reward computation."""
+-        # Process actions
+-        self.action_manager.process_action(action.to(self.device))
+-
+-        self.recorder_manager.record_pre_step()
+-
+-        # Check if we need rendering within physics loop
+-        is_rendering = self.sim.has_gui() or self.sim.has_rtx_sensors()
+-
+-        # Physics stepping
+-        for _ in range(self.cfg.decimation):
+-            self._sim_step_counter += 1
+-            self.action_manager.apply_action()
+-            self.scene.write_data_to_sim()
+-            self.sim.step(render=False)
+-            if self._sim_step_counter % self.cfg.sim.render_interval == 0 and is_rendering:
+-                self.sim.render()
+-            self.scene.update(dt=self.physics_dt)
+-
+-        # Post-step
+-        self.episode_length_buf += 1
+-        self.common_step_counter += 1
+-
+-        # Check terminations
+-        self.reset_buf = self.termination_manager.compute()
+-        self.reset_terminated = self.termination_manager.terminated
+-        self.reset_time_outs = self.termination_manager.time_outs
+-
+-        # >>> CUSTOM: Compute shared state before rewards <<<
+-        self._compute_shared_state()
+-
+-        # Reward computation
+-        self.reward_buf = self.reward_manager.compute(dt=self.step_dt)
+-        # Clip total reward to min=0 (matching source implementation)
+-        self.reward_buf = torch.clamp(self.reward_buf, min=0.0)
+-
+-        if len(self.recorder_manager.active_terms) > 0:
+-            self.obs_buf = self.observation_manager.compute()
+-            self.recorder_manager.record_post_step()
+-
+-        # Reset terminated environments
+-        reset_env_ids = self.reset_buf.nonzero(as_tuple=False).squeeze(-1)
+-        if len(reset_env_ids) > 0:
+-            self.recorder_manager.record_pre_reset(reset_env_ids)
+-            self._reset_idx(reset_env_ids)
+-            self.scene.write_data_to_sim()
+-            self.sim.forward()
+-            if self.sim.has_rtx_sensors() and self.cfg.rerender_on_reset:
+-                self.sim.render()
+-            self.recorder_manager.record_post_reset(reset_env_ids)
+-
+-        # Update command
+-        self.command_manager.compute(dt=self.step_dt)
+-        # Step interval events
+-        if "interval" in self.event_manager.available_modes:
+-            self.event_manager.apply(mode="interval", dt=self.step_dt)
+-        # Compute observations
+-        self.obs_buf = self.observation_manager.compute(update_history=True)
+-
+-        return self.obs_buf, self.reward_buf, self.reset_terminated, self.reset_time_outs, self.extras
++    pass
+diff --git a/Qmini/source/Qmini/Qmini/tasks/manager_based/qmini/qmini_env_cfg.py b/Qmini/source/Qmini/Qmini/tasks/manager_based/qmini/qmini_env_cfg.py
+index 225c0c2..cf7b428 100644
+--- a/Qmini/source/Qmini/Qmini/tasks/manager_based/qmini/qmini_env_cfg.py
++++ b/Qmini/source/Qmini/Qmini/tasks/manager_based/qmini/qmini_env_cfg.py
+@@ -1,4 +1,6 @@
+-"""Environment configuration for Qmini BIRL bipedal locomotion task."""
++"""Velocity walking configuration for the Qmini biped."""
++
++from __future__ import annotations
+ 
+ import os
+ 
+@@ -6,6 +8,7 @@ import isaaclab.sim as sim_utils
+ from isaaclab.actuators import ImplicitActuatorCfg
+ from isaaclab.assets import ArticulationCfg, AssetBaseCfg
+ from isaaclab.envs import ManagerBasedRLEnvCfg
++from isaaclab.managers import CurriculumTermCfg as CurrTerm
+ from isaaclab.managers import EventTermCfg as EventTerm
+ from isaaclab.managers import ObservationGroupCfg as ObsGroup
+ from isaaclab.managers import ObservationTermCfg as ObsTerm
+@@ -19,30 +22,18 @@ from isaaclab.utils import configclass
+ from isaaclab.utils.noise import AdditiveUniformNoiseCfg as Unoise
+ 
+ from . import mdp
+-from .mdp.actions import BIRLActionTermCfg
+ 
+-##
+-# Asset path
+-##
+ 
+-# __file__ is at .../tasks/manager_based/qmini/qmini_env_cfg.py
+-# assets are at .../Qmini/assets/ — need to go up 4 levels (qmini -> manager_based -> tasks -> Qmini)
+ _QMINI_ASSETS_DIR = os.path.join(
+     os.path.dirname(os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))), "assets"
+ )
+-_QMINI_URDF_PATH = os.path.join(_QMINI_ASSETS_DIR, "q1", "urdf", "q1.urdf")
+-
+-
+-##
+-# Scene definition
+-##
++_QMINI_USD_PATH = os.path.join(_QMINI_ASSETS_DIR, "Qmini_ref.usd")
+ 
+ 
+ @configclass
+-class QminiBIRLSceneCfg(InteractiveSceneCfg):
+-    """Configuration for the Qmini BIRL locomotion scene."""
++class QminiWalkSceneCfg(InteractiveSceneCfg):
++    """Flat terrain scene for Qmini walking."""
+ 
+-    # ground terrain (flat plane for v1)
+     terrain = TerrainImporterCfg(
+         prim_path="/World/ground",
+         terrain_type="plane",
+@@ -56,18 +47,11 @@ class QminiBIRLSceneCfg(InteractiveSceneCfg):
+         debug_vis=False,
+     )
+ 
+-    # Qmini bipedal robot
+     robot: ArticulationCfg = ArticulationCfg(
+         prim_path="{ENV_REGEX_NS}/Robot",
+-        spawn=sim_utils.UrdfFileCfg(
+-            asset_path=_QMINI_URDF_PATH,
+-            fix_base=False,
+-            merge_fixed_joints=True,
+-            replace_cylinders_with_capsules=True,
++        spawn=sim_utils.UsdFileCfg(
++            usd_path=_QMINI_USD_PATH,
+             activate_contact_sensors=True,
+-            joint_drive=sim_utils.UrdfFileCfg.JointDriveCfg(
+-                gains=sim_utils.UrdfFileCfg.JointDriveCfg.PDGainsCfg(stiffness=0.0, damping=0.0),
+-            ),
+             rigid_props=sim_utils.RigidBodyPropertiesCfg(
+                 disable_gravity=False,
+                 retain_accelerations=True,
+@@ -123,41 +107,34 @@ class QminiBIRLSceneCfg(InteractiveSceneCfg):
+         },
+     )
+ 
+-    # contact sensor on foot links
+     contact_forces = ContactSensorCfg(
+         prim_path="{ENV_REGEX_NS}/Robot/.*",
+         history_length=3,
+         track_air_time=True,
+-        update_period=0.0,  # updated at physics dt
++        update_period=0.0,
+     )
+ 
+-    # lights
+     sky_light = AssetBaseCfg(
+         prim_path="/World/skyLight",
+         spawn=sim_utils.DomeLightCfg(color=(0.9, 0.9, 0.9), intensity=750.0),
+     )
+ 
+ 
+-##
+-# MDP settings
+-##
+-
+-
+ @configclass
+ class CommandsCfg:
+-    """Command specifications for velocity tracking."""
++    """Forward-only velocity commands for initial walking training."""
+ 
+     base_velocity = mdp.UniformVelocityCommandCfg(
+         asset_name="robot",
+-        resampling_time_range=(5.0, 5.0),
++        resampling_time_range=(10.0, 10.0),
+         rel_standing_envs=0.02,
+         rel_heading_envs=0.0,
+         heading_command=False,
+         debug_vis=True,
+         ranges=mdp.UniformVelocityCommandCfg.Ranges(
+-            lin_vel_x=(-0.3, 0.7),
++            lin_vel_x=(0.10, 0.10),
+             lin_vel_y=(0.0, 0.0),
+-            ang_vel_z=(-1.0, 1.0),
++            ang_vel_z=(0.0, 0.0),
+             heading=(0.0, 0.0),
+         ),
+     )
+@@ -165,245 +142,177 @@ class CommandsCfg:
+ 
+ @configclass
+ class ActionsCfg:
+-    """Action specifications: BIRL action term (12-dim: 2 freq + 10 joints)."""
++    """Reference gait plus residual joint position actions."""
+ 
+-    birl_action = BIRLActionTermCfg(asset_name="robot")
++    joint_pos = mdp.QminiReferenceGaitActionCfg(
++        asset_name="robot",
++        joint_names=[".*"],
++        scale=0.10,
++        gait_period=0.72,
++        stance_ratio=0.60,
++        hip_pitch_amplitude=0.22,
++        knee_pitch_amplitude=0.24,
++        ankle_pitch_amplitude=0.14,
++        push_off_ankle_scale=0.18,
++    )
+ 
+ 
+ @configclass
+ class ObservationsCfg:
+-    """Observation specifications for actor and critic."""
++    """Policy observations for velocity walking."""
+ 
+     @configclass
+     class PolicyCfg(ObsGroup):
+-        """Actor observations: 49D per step x 3 history = 147D total."""
+-
+-        velocity_commands = ObsTerm(func=mdp.velocity_commands_xz)
+-        base_euler = ObsTerm(
+-            func=mdp.base_euler_rp,
+-            noise=Unoise(n_min=-0.15, n_max=0.15),
+-        )
+-        base_ang_vel = ObsTerm(
+-            func=mdp.base_ang_vel_scaled,
+-            noise=Unoise(n_min=-0.15, n_max=0.15),
+-        )
+-        joint_pos_rel = ObsTerm(
+-            func=mdp.joint_pos_rel_to_ref,
+-            noise=Unoise(n_min=-0.05, n_max=0.05),
+-        )
+-        joint_vel = ObsTerm(
+-            func=mdp.joint_vel_scaled,
+-            noise=Unoise(n_min=-0.06, n_max=0.06),
+-        )
+-        joint_pos_err = ObsTerm(func=mdp.joint_pos_error)
+-        phase_sig = ObsTerm(func=mdp.phase_signal)
+-        phase_freq = ObsTerm(func=mdp.phase_freq_signal)
++        base_lin_vel = ObsTerm(func=mdp.base_lin_vel, noise=Unoise(n_min=-0.1, n_max=0.1))
++        base_ang_vel = ObsTerm(func=mdp.base_ang_vel, noise=Unoise(n_min=-0.2, n_max=0.2))
++        projected_gravity = ObsTerm(func=mdp.projected_gravity, noise=Unoise(n_min=-0.05, n_max=0.05))
++        velocity_commands = ObsTerm(func=mdp.generated_commands, params={"command_name": "base_velocity"})
++        joint_pos = ObsTerm(func=mdp.joint_pos_rel, noise=Unoise(n_min=-0.01, n_max=0.01))
++        joint_vel = ObsTerm(func=mdp.joint_vel_rel, noise=Unoise(n_min=-1.5, n_max=1.5))
++        actions = ObsTerm(func=mdp.last_action)
++        gait_phase = ObsTerm(func=mdp.gait_phase_obs)
+ 
+         def __post_init__(self) -> None:
+             self.enable_corruption = True
+             self.concatenate_terms = True
+-            self.history_length = 3
+-            self.flatten_history_dim = True
+ 
+-    @configclass
+-    class CriticCfg(ObsGroup):
+-        """Critic observations: privileged info with history."""
+-
+-        velocity_commands = ObsTerm(func=mdp.velocity_commands_xz)
+-        cmd_lin_vel_err = ObsTerm(func=mdp.cmd_lin_vel_error)
+-        cmd_ang_vel_err = ObsTerm(func=mdp.cmd_ang_vel_error)
+-        base_lin_vel = ObsTerm(func=mdp.base_lin_vel)
+-        base_euler = ObsTerm(func=mdp.base_euler_rp_privileged)
+-        base_ang_vel = ObsTerm(func=mdp.base_ang_vel_scaled_privileged)
+-        joint_pos_rel = ObsTerm(func=mdp.joint_pos_rel_to_ref_privileged)
+-        joint_vel = ObsTerm(func=mdp.joint_vel_scaled_privileged)
+-        action_target_rel = ObsTerm(func=mdp.action_target_rel_to_ref)
+-        joint_pos_err = ObsTerm(func=mdp.joint_pos_error_privileged)
+-        phase_sig = ObsTerm(func=mdp.phase_signal)
+-        phase_freq = ObsTerm(func=mdp.phase_freq_signal)
+-        last_net_out = ObsTerm(func=mdp.last_net_out_joints)
+-        foot_height = ObsTerm(func=mdp.foot_height_obs)
+-        base_height = ObsTerm(func=mdp.base_height_obs)
+-        foot_vel = ObsTerm(func=mdp.foot_vel_obs)
+-        base_acc = ObsTerm(func=mdp.base_acc_obs)
+-        foot_force = ObsTerm(
+-            func=mdp.foot_force_obs,
+-            params={"sensor_cfg": SceneEntityCfg("contact_forces", body_names=["ankle_pitch_l", "ankle_pitch_r"])},
+-        )
+-        # Duplicate last_net_out (matches source)
+-        last_net_out_2 = ObsTerm(func=mdp.last_net_out_joints)
+-        # Delayed actor obs (same as actor but without noise in critic)
+-        base_euler_delayed = ObsTerm(func=mdp.base_euler_rp)
+-        base_ang_vel_delayed = ObsTerm(func=mdp.base_ang_vel_scaled)
+-        joint_pos_rel_delayed = ObsTerm(func=mdp.joint_pos_rel_to_ref)
+-        joint_vel_delayed = ObsTerm(func=mdp.joint_vel_scaled)
+-        joint_pos_err_delayed = ObsTerm(func=mdp.joint_pos_error)
+-
+-        def __post_init__(self) -> None:
+-            self.enable_corruption = False
+-            self.concatenate_terms = True
+-            self.history_length = 3
+-            self.flatten_history_dim = True
+-
+-    # Observation groups
+     policy: PolicyCfg = PolicyCfg()
+-    critic: CriticCfg = CriticCfg()
+ 
+ 
+ @configclass
+ class EventCfg:
+-    """Domain randomization events."""
++    """Domain randomization and resets."""
+ 
+-    # Startup events
+     physics_material = EventTerm(
+         func=mdp.randomize_rigid_body_material,
+         mode="startup",
+         params={
+             "asset_cfg": SceneEntityCfg("robot", body_names=".*"),
+-            "static_friction_range": (0.2, 1.5),
+-            "dynamic_friction_range": (0.2, 1.5),
++            "static_friction_range": (0.5, 1.25),
++            "dynamic_friction_range": (0.4, 0.9),
+             "restitution_range": (0.0, 0.0),
+             "num_buckets": 64,
+         },
+     )
+-
+-    add_body_mass = EventTerm(
++    add_base_mass = EventTerm(
+         func=mdp.randomize_rigid_body_mass,
+         mode="startup",
+         params={
+-            "asset_cfg": SceneEntityCfg("robot", body_names=".*"),
+-            "mass_distribution_params": (0.5, 1.5),
++            "asset_cfg": SceneEntityCfg("robot", body_names="base_link"),
++            "mass_distribution_params": (-0.3, 0.3),
++            "operation": "add",
++        },
++    )
++    randomize_actuator_gains = EventTerm(
++        func=mdp.randomize_actuator_gains,
++        mode="startup",
++        params={
++            "asset_cfg": SceneEntityCfg("robot"),
++            "stiffness_distribution_params": (0.85, 1.15),
++            "damping_distribution_params": (0.85, 1.15),
+             "operation": "scale",
+         },
+     )
+-
+-    # Reset events
+     reset_base = EventTerm(
+         func=mdp.reset_root_state_uniform,
+         mode="reset",
+         params={
+-            "pose_range": {"x": (-0.5, 0.5), "y": (-0.5, 0.5), "yaw": (-0.2, 0.2)},
++            "pose_range": {"x": (-0.3, 0.3), "y": (-0.3, 0.3), "yaw": (-0.4, 0.4)},
+             "velocity_range": {
+-                "x": (0.0, 0.0),
+-                "y": (0.0, 0.0),
++                "x": (-0.05, 0.05),
++                "y": (-0.05, 0.05),
+                 "z": (0.0, 0.0),
+-                "roll": (0.0, 0.0),
+-                "pitch": (0.0, 0.0),
+-                "yaw": (0.0, 0.0),
++                "roll": (-0.05, 0.05),
++                "pitch": (-0.05, 0.05),
++                "yaw": (-0.05, 0.05),
+             },
+         },
+     )
+-
+     reset_robot_joints = EventTerm(
+         func=mdp.reset_joints_by_scale,
+         mode="reset",
+-        params={
+-            "position_range": (1.0, 1.0),
+-            "velocity_range": (0.0, 0.0),
+-        },
+-    )
+-
+-    randomize_actuator_gains = EventTerm(
+-        func=mdp.randomize_actuator_gains,
+-        mode="reset",
+-        params={
+-            "asset_cfg": SceneEntityCfg("robot"),
+-            "stiffness_distribution_params": (0.8, 1.2),
+-            "damping_distribution_params": (0.8, 1.2),
+-            "operation": "scale",
+-        },
++        params={"position_range": (1.0, 1.0), "velocity_range": (0.0, 0.0)},
+     )
+-
+-    # Interval events
+     push_robot = EventTerm(
+         func=mdp.push_by_setting_velocity,
+         mode="interval",
+-        interval_range_s=(3.0, 3.0),
+-        params={
+-            "velocity_range": {"x": (-0.5, 0.5), "y": (-0.5, 0.5)},
+-        },
++        interval_range_s=(8.0, 12.0),
++        params={"velocity_range": {"x": (-0.3, 0.3), "y": (-0.2, 0.2)}},
+     )
+ 
+ 
+ @configclass
+ class RewardsCfg:
+-    """All 29 BIRL reward terms."""
+-
+-    # Primary rewards
+-    constant = RewTerm(func=mdp.constant_reward, weight=0.3)
+-    base_height = RewTerm(func=mdp.base_height_reward, weight=1.0)
+-    balance = RewTerm(func=mdp.balance_reward, weight=1.5)
+-    forward_velocity = RewTerm(func=mdp.forward_velocity_reward, weight=2.3)
+-    yaw_rate = RewTerm(func=mdp.yaw_rate_reward, weight=2.5)
+-    lateral_velocity = RewTerm(func=mdp.lateral_velocity_reward, weight=0.7)
+-    vertical_velocity = RewTerm(func=mdp.vertical_velocity_reward, weight=0.6)
+-    angular_velocity = RewTerm(func=mdp.angular_velocity_reward, weight=0.6)
+-    twist = RewTerm(func=mdp.twist_reward, weight=2.5)
+-
+-    # Acceleration reward (weight includes balance_rew multiplication inside func)
+-    base_acceleration = RewTerm(func=mdp.base_acceleration_reward, weight=0.1)
+-
+-    # Foot rewards
+-    foot_clearance = RewTerm(
+-        func=mdp.foot_clearance_reward,
+-        weight=1.0,
+-        params={"sensor_cfg": SceneEntityCfg("contact_forces", body_names=["ankle_pitch_l", "ankle_pitch_r"])},
++    """Walking rewards adapted from the Guguji biped velocity task."""
++
++    track_lin_vel_x = RewTerm(
++        func=mdp.track_lin_vel_x_yaw_frame_exp,
++        weight=4.8,
++        params={"command_name": "base_velocity", "std": 0.10},
+     )
+-    foot_support = RewTerm(
+-        func=mdp.foot_support_reward,
+-        weight=0.7,
+-        params={"sensor_cfg": SceneEntityCfg("contact_forces", body_names=["ankle_pitch_l", "ankle_pitch_r"])},
++    forward_progress = RewTerm(func=mdp.forward_progress_yaw_frame, weight=4.0)
++    alive_bonus = RewTerm(func=mdp.is_alive, weight=0.6)
++
++    upright = RewTerm(func=mdp.upright_reward, weight=1.6)
++    height = RewTerm(func=mdp.height_reward, weight=1.0, params={"target_height": 0.45})
++
++    hip_alternation = RewTerm(
++        func=mdp.hip_alternation_reward,
++        weight=1.6,
++        params={
++            "left_hip_name": "hip_pitch_l",
++            "right_hip_name": "hip_pitch_r",
++            "target_separation": 0.42,
++            "antiphase_sigma": 0.25,
++        },
+     )
+-    foot_height = RewTerm(
+-        func=mdp.foot_height_reward,
+-        weight=0.7,
+-        params={"sensor_cfg": SceneEntityCfg("contact_forces", body_names=["ankle_pitch_l", "ankle_pitch_r"])},
++    knee_flexion = RewTerm(
++        func=mdp.knee_flexion_reward,
++        weight=0.6,
++        params={"left_knee_name": "knee_pitch_l", "right_knee_name": "knee_pitch_r", "target": 1.0, "sigma": 0.35},
+     )
+-    foot_soft_contact = RewTerm(
+-        func=mdp.foot_soft_contact_reward,
+-        weight=2.7,
+-        params={"sensor_cfg": SceneEntityCfg("contact_forces", body_names=["ankle_pitch_l", "ankle_pitch_r"])},
++    knee_symmetry = RewTerm(
++        func=mdp.knee_symmetry_penalty,
++        weight=-0.5,
++        params={"left_knee_name": "knee_pitch_l", "right_knee_name": "knee_pitch_r"},
+     )
+-    feet_contact_force = RewTerm(
+-        func=mdp.feet_contact_force_reward,
+-        weight=0.001,
+-        params={"sensor_cfg": SceneEntityCfg("contact_forces", body_names=["ankle_pitch_l", "ankle_pitch_r"])},
++    hip_symmetry = RewTerm(
++        func=mdp.hip_symmetry_penalty,
++        weight=-0.5,
++        params={"left_hip_name": "hip_pitch_l", "right_hip_name": "hip_pitch_r"},
+     )
+-    foot_slip = RewTerm(
+-        func=mdp.foot_slip_reward,
+-        weight=0.5,
+-        params={"sensor_cfg": SceneEntityCfg("contact_forces", body_names=["ankle_pitch_l", "ankle_pitch_r"])},
++    feet_air_time = RewTerm(
++        func=mdp.feet_air_time_positive_biped,
++        weight=1.2,
++        params={
++            "sensor_cfg": SceneEntityCfg("contact_forces", body_names=["ankle_pitch_l", "ankle_pitch_r"]),
++            "command_name": "base_velocity",
++            "threshold": 0.20,
++        },
+     )
+-    foot_vertical_velocity = RewTerm(func=mdp.foot_vertical_velocity_reward, weight=0.2)
+-    foot_acceleration = RewTerm(func=mdp.foot_acceleration_reward, weight=0.05)
+-
+-    # Posture rewards
+-    leg_width = RewTerm(func=mdp.leg_width_reward, weight=0.5)
+-    foot_pitch = RewTerm(func=mdp.foot_pitch_reward, weight=0.5)
+-
+-    # Smoothness rewards
+-    action_smoothness = RewTerm(func=mdp.action_smoothness_reward, weight=1.5)
+-    net_out_smoothness = RewTerm(func=mdp.net_out_smoothness_reward, weight=0.001)
+-
+-    # Constraint rewards
+-    action_constraint = RewTerm(func=mdp.action_constraint_reward, weight=0.2)
+-    support_ankle_constraint = RewTerm(
+-        func=mdp.support_ankle_constraint_reward,
+-        weight=0.1,
++
++    action_rate = RewTerm(func=mdp.action_rate_l2, weight=-0.03)
++    joint_pos_limits = RewTerm(func=mdp.joint_pos_limits, weight=-2.0)
++    lateral_velocity = RewTerm(func=mdp.lin_vel_y_l2, weight=-0.3)
++    yaw_rate = RewTerm(func=mdp.ang_vel_z_l2, weight=-0.4)
++    ang_vel_xy = RewTerm(func=mdp.ang_vel_xy_l2, weight=-0.1)
++    lin_vel_z = RewTerm(func=mdp.lin_vel_z_l2, weight=-1.5)
++    backward_velocity = RewTerm(func=mdp.backward_velocity_penalty_yaw_frame, weight=-2.8)
++    stall_penalty = RewTerm(
++        func=mdp.stall_penalty_yaw_frame,
++        weight=-4.0,
++        params={"command_name": "base_velocity", "threshold": 0.08},
++    )
++    undesired_knee_contacts = RewTerm(
++        func=mdp.undesired_contacts,
++        weight=-1.0,
++        params={"sensor_cfg": SceneEntityCfg("contact_forces", body_names=["knee_pitch_l", "knee_pitch_r"]), "threshold": 1.0},
++    )
++    feet_slide = RewTerm(
++        func=mdp.feet_slide,
++        weight=-0.1,
+         params={"sensor_cfg": SceneEntityCfg("contact_forces", body_names=["ankle_pitch_l", "ankle_pitch_r"])},
+     )
+-    joint_pos_error = RewTerm(func=mdp.joint_pos_error_reward, weight=0.2)
+-
+-    # Energy rewards
+-    joint_velocity = RewTerm(func=mdp.joint_velocity_reward, weight=0.003)
+-    joint_torque = RewTerm(func=mdp.joint_torque_reward, weight=0.001)
+-
+-    # Regularization rewards
+-    phase_freq = RewTerm(func=mdp.phase_freq_reward, weight=0.03)
+-    net_out_value = RewTerm(func=mdp.net_out_value_reward, weight=0.0001)
+-
+-    # Gait coordination
+-    foot_phase_coordination = RewTerm(func=mdp.foot_phase_coordination_reward, weight=0.3)
+ 
+ 
+ @configclass
+@@ -411,62 +320,56 @@ class TerminationsCfg:
+     """Termination conditions."""
+ 
+     time_out = DoneTerm(func=mdp.time_out, time_out=True)
+-    twist_over = DoneTerm(func=mdp.twist_over, params={"max_angle": 0.7})
+-    height_over = DoneTerm(func=mdp.height_over, params={"min_height": 0.2})
+     base_contact = DoneTerm(
+         func=mdp.illegal_contact,
+-        params={
+-            "sensor_cfg": SceneEntityCfg("contact_forces", body_names=["base_link"]),
+-            "threshold": 1.0,
+-        },
++        params={"sensor_cfg": SceneEntityCfg("contact_forces", body_names="base_link"), "threshold": 1.0},
+     )
++    bad_orientation = DoneTerm(func=mdp.bad_orientation, params={"limit_angle": 0.9})
++    base_height = DoneTerm(func=mdp.base_height_below_threshold, params={"minimum_height": 0.20})
+ 
+ 
+-##
+-# Environment configuration
+-##
++@configclass
++class CurriculumCfg:
++    """Forward velocity curriculum."""
++
++    velocity_command = CurrTerm(
++        func=mdp.velocity_command_curriculum,
++        params={"command_name": "base_velocity", "min_vel": 0.10, "max_vel": 0.30, "success_threshold": 0.8},
++    )
+ 
+ 
+ @configclass
+-class QminiBIRLEnvCfg(ManagerBasedRLEnvCfg):
+-    """Complete configuration for Qmini BIRL locomotion environment."""
++class QminiWalkEnvCfg(ManagerBasedRLEnvCfg):
++    """Qmini flat-terrain walking task."""
+ 
+-    # Scene settings
+-    scene: QminiBIRLSceneCfg = QminiBIRLSceneCfg(num_envs=4096, env_spacing=2.5)
+-    # Basic settings
++    scene: QminiWalkSceneCfg = QminiWalkSceneCfg(num_envs=4096, env_spacing=2.5)
+     observations: ObservationsCfg = ObservationsCfg()
+     actions: ActionsCfg = ActionsCfg()
+     commands: CommandsCfg = CommandsCfg()
+-    # MDP settings
+     rewards: RewardsCfg = RewardsCfg()
+     terminations: TerminationsCfg = TerminationsCfg()
+     events: EventCfg = EventCfg()
++    curriculum: CurriculumCfg = CurriculumCfg()
+ 
+     def __post_init__(self) -> None:
+-        """Post initialization."""
+-        # General settings: dt=0.001, decimation=15 -> control at 66.7Hz
+-        self.decimation = 15
+-        self.episode_length_s = 10.0
+-        # Simulation settings
+-        self.sim.dt = 0.001
++        self.decimation = 4
++        self.episode_length_s = 20.0
++        self.sim.dt = 0.005
+         self.sim.render_interval = self.decimation
++        self.sim.disable_contact_processing = True
+         self.sim.physics_material = self.scene.terrain.physics_material
+-        # PhysX settings
+         self.sim.physx.gpu_max_rigid_patch_count = 10 * 2**15
+-        # Viewer settings
+-        self.viewer.eye = (4.0, 4.0, 3.0)
+-        self.viewer.lookat = (0.0, 0.0, 0.5)
+-        # Contact sensor update period
+         if self.scene.contact_forces is not None:
+             self.scene.contact_forces.update_period = self.sim.dt
+ 
+ 
+ @configclass
+-class QminiBIRLEnvCfg_PLAY(QminiBIRLEnvCfg):
+-    """Play/evaluation configuration with fewer environments and no randomization."""
++class QminiWalkEnvCfg_PLAY(QminiWalkEnvCfg):
++    """Evaluation configuration."""
+ 
+     def __post_init__(self) -> None:
+         super().__post_init__()
+-        self.scene.num_envs = 4096
++        self.scene.num_envs = 50
+         self.scene.env_spacing = 2.5
+         self.observations.policy.enable_corruption = False
++        self.events.push_robot = None
+diff --git a/record.md b/record.md
+index 131bd97..0db9ce9 100644
+--- a/record.md
++++ b/record.md
+@@ -1,4 +1,4 @@
+-# record.md — Qmini BIRL 双足步态训练系统
++# record.md — Qmini Walk 双足行走训练系统
+ 
+ ## 项目配置和操作指南
+ 
+@@ -12,14 +12,14 @@ conda activate isaaclab
+ cd /home/a/Desktop/github/Qmini/Qmini
+ pip install -e source/Qmini
+ 
+-# 列出可用环境（确认 Qmini-BIRL-v0 已注册）
++# 列出可用环境（确认 Qmini-Walk-v0 已注册）
+ python scripts/list_envs.py
+ 
+ # 运行随机动作测试（验证仿真能启动）
+-python3 scripts/random_agent.py --task=Qmini-BIRL-v0 --num_envs 1
++python3 scripts/random_agent.py --task=Qmini-Walk-v0 --num_envs 1
+ 
+ # 运行零动作测试（验证机器人能站立）
+-python scripts/zero_agent.py --task=Qmini-BIRL-v0 --num_envs 1
++python scripts/zero_agent.py --task=Qmini-Walk-v0 --num_envs 1
+ ```
+ 
+ ### 2. 开始训练
+@@ -28,23 +28,23 @@ python scripts/zero_agent.py --task=Qmini-BIRL-v0 --num_envs 1
+ cd /home/a/Desktop/github/Qmini/Qmini
+ 
+ # 基础训练（headless，4096 环境，5000 iterations）
+-python scripts/rsl_rl/train.py --task=Qmini-BIRL-v0 --headless
++python scripts/rsl_rl/train.py --task=Qmini-Walk-v0 --headless
+ 
+ # 自定义参数训练
+-python scripts/rsl_rl/train.py --task=Qmini-BIRL-v0 --num_envs 4096 --max_iterations 5000 --headless
++python scripts/rsl_rl/train.py --task=Qmini-Walk-v0 --num_envs 4096 --max_iterations 5000 --headless
+ 
+ # 带可视化训练（调试用，环境数建议减少）
+-python scripts/rsl_rl/train.py --task=Qmini-BIRL-v0 --num_envs 64
++python scripts/rsl_rl/train.py --task=Qmini-Walk-v0 --num_envs 64
+ ```
+ 
+ ### 3. 继续上次训练
+ 
+ ```bash
+ # 从最新 checkpoint 继续
+-python scripts/rsl_rl/train.py --task=Qmini-BIRL-v0 --resume --headless
++python scripts/rsl_rl/train.py --task=Qmini-Walk-v0 --resume --headless
+ 
+ # 从指定 checkpoint 继续
+-python scripts/rsl_rl/train.py --task=Qmini-BIRL-v0 --resume \
++python scripts/rsl_rl/train.py --task=Qmini-Walk-v0 --resume \
+     --load_run 2026-04-04_xx-xx-xx --load_checkpoint model_2000.pt \
+     --max_iterations 5000 --headless
+ ```
+@@ -53,14 +53,14 @@ python scripts/rsl_rl/train.py --task=Qmini-BIRL-v0 --resume \
+ 
+ ```bash
+ # 播放最新模型（可视化）
+-python scripts/rsl_rl/play.py --task=Qmini-BIRL-Play-v0 --num_envs 64
++python scripts/rsl_rl/play.py --task=Qmini-Walk-Play-v0 --num_envs 64
+ 
+ # 从指定 checkpoint 播放
+-python scripts/rsl_rl/play.py --task=Qmini-BIRL-Play-v0 --num_envs 1 \
++python scripts/rsl_rl/play.py --task=Qmini-Walk-Play-v0 --num_envs 1 \
+     --load_run 2026-04-04_xx-xx-xx --load_checkpoint model_5000.pt
+ 
+ # 录制视频
+-python scripts/rsl_rl/play.py --task=Qmini-BIRL-Play-v0 --num_envs 1 \
++python scripts/rsl_rl/play.py --task=Qmini-Walk-Play-v0 --num_envs 1 \
+     --video --video_length 600 --headless
+ ```
+ 
+@@ -68,7 +68,7 @@ python scripts/rsl_rl/play.py --task=Qmini-BIRL-Play-v0 --num_envs 1 \
+ 
+ ```bash
+ # 导出最优 checkpoint 为 ONNX
+-python scripts/rsl_rl/play.py --task=Qmini-BIRL-Play-v0 --num_envs 1 \
++python scripts/rsl_rl/play.py --task=Qmini-Walk-Play-v0 --num_envs 1 \
+     --load_run <run_name> --load_checkpoint model_5000.pt \
+     --export_onnx --headless
+ ```
+@@ -77,10 +77,10 @@ python scripts/rsl_rl/play.py --task=Qmini-BIRL-Play-v0 --num_envs 1 \
+ 
+ ```bash
+ # 查看所有训练
+-tensorboard --logdir logs/rsl_rl/qmini_birl --port 6006
++tensorboard --logdir logs/rsl_rl/qmini_walk --port 6006
+ 
+ # 查看特定训练
+-tensorboard --logdir logs/rsl_rl/qmini_birl/<timestamp> --port 6006
++tensorboard --logdir logs/rsl_rl/qmini_walk/<timestamp> --port 6006
+ ```
+ 
+ ---
+@@ -89,19 +89,19 @@ tensorboard --logdir logs/rsl_rl/qmini_birl/<timestamp> --port 6006
+ 
+ ### 与 RoboTamer4Qmini（原始 Isaac Gym 版）的区别
+ 
+-| 维度 | RoboTamer4Qmini (Isaac Gym) | Qmini BIRL (本项目, Isaac Lab) |
++| 维度 | RoboTamer4Qmini (Isaac Gym) | Qmini Walk (本项目, Isaac Lab) |
+ |------|----------------------------|-------------------------------|
+ | 仿真框架 | Isaac Gym (legged_gym) | Isaac Lab (ManagerBasedRLEnv) |
+-| 环境基类 | 自定义 LeggedRobotEnv | QminiBIRLEnv (ManagerBasedRLEnv 子类) |
++| 环境基类 | 自定义 LeggedRobotEnv | QminiWalkEnv (ManagerBasedRLEnv 子类) |
+ | 配置方式 | Python 类继承 (Base/BIRL) | @configclass 装饰器 (声明式) |
+-| 动作系统 | 自定义 BIRLTask.action() | BIRLActionTerm (ActionTerm 子类) |
++| 动作系统 | 自定义 BIRLTask.action() | QminiReferenceGaitAction (ActionTerm 子类) |
+ | 观测系统 | 手动 torch.cat + deque 历史 | ObsTerm + history_length=3 (内置) |
+ | 奖励系统 | 单函数返回 rew_dict | 29 个独立 RewTerm + 共享状态 |
+ | 命令系统 | 自定义 _resample_commands | UniformVelocityCommandCfg (内置) |
+ | 域随机化 | 手动在 step 中实现 | EventTermCfg (startup/reset/interval) |
+ | 传感器延迟 | DelayDeque (10-50 步) | v1 暂未移植（后续可添加） |
+ | 训练框架 | 自定义 PPO | RSL-RL (标准 Isaac Lab 集成) |
+-| Gym 注册 | 无 | gymnasium.register("Qmini-BIRL-v0") |
++| Gym 注册 | 无 | gymnasium.register("Qmini-Walk-v0") |
+ 
+ ### 观测空间
+ 
+@@ -350,14 +350,14 @@ hip_yaw_r=-0.4, hip_roll_r=0.1, hip_pitch_r=1.5, knee_pitch_r=-1.0, ankle_pitch_
+             └── tasks/manager_based/qmini/
+                 ├── __init__.py            # gym.register ★
+                 ├── qmini_env_cfg.py       # 环境配置（场景+机器人+MDP全部） ★
+-                ├── qmini_env.py           # QminiBIRLEnv 自定义环境类 ★
++                ├── qmini_env.py           # QminiWalkEnv 自定义环境类 ★
+                 ├── agents/
+                 │   └── rsl_rl_ppo_cfg.py  # PPO 训练参数 ★
+                 └── mdp/
+                     ├── __init__.py        # MDP 导出 ★
+-                    ├── actions.py         # PhaseModulator + BIRLActionTerm ★
+-                    ├── observations.py    # Actor/Critic 观测函数 ★
+-                    ├── rewards.py         # 29 项奖励函数 ★
++                    ├── actions.py         # 参考步态 + residual 动作 ★
++                    ├── observations.py    # velocity walking 观测函数 ★
++                    ├── rewards.py         # 行走速度/姿态/步态奖励 ★
+                     ├── terminations.py    # 终止条件 ★
+                     └── events.py          # 域随机化事件 ★
+ ```
+@@ -368,52 +368,44 @@ hip_yaw_r=-0.4, hip_roll_r=0.1, hip_pitch_r=1.5, knee_pitch_r=-1.0, ankle_pitch_
+ 
+ ## 变更记录
+ 
+-### 2026-04-04 从 RoboTamer4Qmini (Isaac Gym) 迁移到 Isaac Lab
++### 2026-05-10 新建 Qmini-Walk velocity walking 任务
+ 
+ **目标**：
+-- 将 RoboTamer4Qmini 的 BIRL（Bio-Inspired Rhythmic Locomotion）训练管线完整迁移到 Isaac Lab 框架
+-- 保持原有的相位调制步态生成、29 项奖励函数、域随机化等核心逻辑
+-- 适配 Isaac Lab 的 ManagerBasedRLEnv 架构（声明式配置、模块化 MDP）
+-
+-**创建的文件**（11 个）：
+-1. `assets/q1/urdf/q1.urdf` + `meshes/*.STL` — 机器人资产（从 RoboTamer4Qmini 复制）
+-2. `mdp/actions.py` — **PhaseModulator** 类 + **BIRLActionTerm**（12 维动作：2 频率 + 10 关节增量）
+-3. `mdp/observations.py` — 20+ 自定义观测函数（Actor 49D + Critic 特权信息）
+-4. `mdp/rewards.py` — 29 项奖励函数（精确移植源码数学公式）
++- 删除旧的 `Qmini-BIRL-v0` 注册，改为 `Qmini-Walk-v0` / `Qmini-Walk-Play-v0`
++- 参考 `guguji_isaaclab` 的双足行走任务，使用“参考步态 + policy residual”的动作形式
++- 奖励重点改为前向速度跟踪、身体直立、base 高度、左右腿反相、单腿支撑、少滑脚
++
++**创建/重写的文件**：
++1. `assets/Qmini_ref.usd` — 引用版机器人 USD 资产
++2. `mdp/actions.py` — **QminiReferenceGaitAction**（10 维关节 residual 动作）
++3. `mdp/observations.py` — gait phase 观测补充，其他观测复用 Isaac Lab 内置项
++4. `mdp/rewards.py` — velocity walking 奖励函数
+ 5. `mdp/terminations.py` — twist_over + height_over
+-6. `mdp/events.py` — 域随机化事件占位
++6. `mdp/curriculums.py` — 前向速度课程
+ 7. `mdp/__init__.py` — 重新导出所有 MDP 模块
+-8. `qmini_env.py` — **QminiBIRLEnv**（共享状态计算 + 总奖励裁剪）
++8. `qmini_env.py` — **QminiWalkEnv**
+ 9. `qmini_env_cfg.py` — 完整环境配置（场景/机器人/命令/观测/奖励/终止/事件）
+-10. `agents/rsl_rl_ppo_cfg.py` — PPO 超参数（[512,256] MLP, γ=0.995, 5000 iter）
+-11. `__init__.py` — 注册 Qmini-BIRL-v0 和 Qmini-BIRL-Play-v0
++10. `agents/rsl_rl_ppo_cfg.py` — PPO 超参数（[512,256,128] MLP, γ=0.99, 5000 iter）
++11. `__init__.py` — 注册 Qmini-Walk-v0 和 Qmini-Walk-Play-v0
+ 
+ **参考来源**：
+-- 机器人 URDF 和网格: `~/Desktop/RoboTamer4Qmini/assets/q1/`
+-- 动作逻辑: `~/Desktop/RoboTamer4Qmini/env/tasks/birl_task.py` (action 方法)
+-- 观测计算: `~/Desktop/RoboTamer4Qmini/env/tasks/birl_task.py` (pure_observation / pure_critic_observation)
+-- 奖励函数: `~/Desktop/RoboTamer4Qmini/env/tasks/birl_task.py` (reward 方法, 29 项)
+-- 相位调制器: `~/Desktop/RoboTamer4Qmini/env/utils/phase_modulator.py`
+-- 配置参数: `~/Desktop/RoboTamer4Qmini/config/Base.py` + `config/BIRL.py`
+-- Isaac Lab 参考: `IsaacLab/source/isaaclab_tasks/.../locomotion/velocity/` (Cassie/H1 配置)
++- `~/Desktop/github/guguji_isaaclab/source/guguji_locomotion/.../locomotion/velocity/`
++- Isaac Lab 内置 locomotion MDP 项
+ 
+ **关键设计决策**：
+-- 使用 **ManagerBasedRLEnv 子类** (`QminiBIRLEnv`) 而非纯声明式——因为 29 项奖励共享 `balance_rew`、`static_flag`、`lin_vel_x_norm` 等中间量，需要在 step() 中预计算
+-- 用 **自定义 ActionTerm** 实现相位调制器 + 增量动作，而非标准 JointPositionActionCfg——因为原始系统的动作处理涉及频率控制、增量累加、历史缓存等非标准逻辑
+-- 用 Isaac Lab 内置 `history_length=3` 实现观测历史堆叠，替代原始的 `deque(maxlen=3)` 手动管理
+-- **传感器延迟暂未移植** (v1)——原始系统有 10-50 步随机延迟模拟真实传感器，Isaac Lab 无内置延迟机制，后续可通过自定义 ObsTerm modifier 实现
+-- 总奖励裁剪到 `min=0` 在 env subclass 的 `step()` 方法中实现
++- 用参考步态给双足相位先验，策略只学习 residual 修正
++- 初始命令只训练前向速度，课程从 0.10 m/s 增到 0.30 m/s
++- 先用平地训练，粗糙地形/传感器延迟后续再加
+ 
+-**状态**：✅ 代码完成，等待安装和训练测试
++**状态**：✅ 代码完成，任务注册验证通过
+ 
+ ---
+ 
+ ## 待办事项
+ 
+-- [x] 复制机器人资产 (URDF + STL meshes)
+-- [x] 实现 PhaseModulator + BIRLActionTerm
+-- [x] 实现自定义观测函数
+-- [x] 移植 29 项奖励函数
++- [x] 生成引用版 USD 资产
++- [x] 实现 QminiReferenceGaitAction
++- [x] 实现 velocity walking 观测/奖励函数
+ - [x] 实现终止条件
+ - [x] 配置域随机化
+ - [x] 编写环境配置和自定义环境类
