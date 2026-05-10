@@ -9,7 +9,7 @@
 conda activate isaaclab
 
 # 安装项目（editable mode）
-cd ~/Desktop/Qmini/Qmini
+cd /home/a/Desktop/github/Qmini/Qmini
 pip install -e source/Qmini
 
 # 列出可用环境（确认 Qmini-BIRL-v0 已注册）
@@ -25,7 +25,7 @@ python scripts/zero_agent.py --task=Qmini-BIRL-v0 --num_envs 1
 ### 2. 开始训练
 
 ```bash
-cd ~/Desktop/Qmini/Qmini
+cd /home/a/Desktop/github/Qmini/Qmini
 
 # 基础训练（headless，4096 环境，5000 iterations）
 python scripts/rsl_rl/train.py --task=Qmini-BIRL-v0 --headless
@@ -53,7 +53,7 @@ python scripts/rsl_rl/train.py --task=Qmini-BIRL-v0 --resume \
 
 ```bash
 # 播放最新模型（可视化）
-python scripts/rsl_rl/play.py --task=Qmini-BIRL-Play-v0 --num_envs 1
+python scripts/rsl_rl/play.py --task=Qmini-BIRL-Play-v0 --num_envs 64
 
 # 从指定 checkpoint 播放
 python scripts/rsl_rl/play.py --task=Qmini-BIRL-Play-v0 --num_envs 1 \

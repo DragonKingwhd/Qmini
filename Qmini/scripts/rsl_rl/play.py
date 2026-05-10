@@ -54,6 +54,7 @@ import gymnasium as gym
 import os
 import time
 import torch
+from gymnasium import error as gym_error
 
 from rsl_rl.runners import OnPolicyRunner
 
@@ -102,7 +103,18 @@ def main(env_cfg: ManagerBasedRLEnvCfg | DirectRLEnvCfg | DirectMARLEnvCfg, agen
     elif args_cli.checkpoint:
         resume_path = retrieve_file_path(args_cli.checkpoint)
     else:
-        resume_path = get_checkpoint_path(log_root_path, agent_cfg.load_run, agent_cfg.load_checkpoint)
+        if not os.path.isdir(log_root_path):
+            raise gym_error.Error(
+                f"No trained checkpoint directory found at '{log_root_path}'. "
+                "Run training first, or pass an existing model with --checkpoint /path/to/model.pt."
+            )
+        try:
+            resume_path = get_checkpoint_path(log_root_path, agent_cfg.load_run, agent_cfg.load_checkpoint)
+        except FileNotFoundError as exc:
+            raise gym_error.Error(
+                f"No checkpoint found under '{log_root_path}'. "
+                "Run training first, or pass an existing model with --checkpoint /path/to/model.pt."
+            ) from exc
 
     log_dir = os.path.dirname(resume_path)
 
