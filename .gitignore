@@ -8,7 +8,7 @@ venv/
 *.log
 *.npz
 *.pth
-*.onnx
+# *.onnx
 checkpoints/
 runs/
 logs/
