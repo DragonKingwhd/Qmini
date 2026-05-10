@@ -5,7 +5,46 @@ imu:
   # Length 3, [wx, wy, wz] in body frame.
   gyro_bias: null            # e.g. [0.001, -0.002, 0.000]
 
-# Optional: per-joint encoder zero offset (rad), if your motor zero != URDF zero.
-# Length must be 10, ordered like deploy.constants.JOINT_NAMES.
 joints:
+  # Motor-side q (rad) when the joint is at URDF zero (joint_q = 0).
+  # Captured 2026-05-10 with robot suspended, legs hanging straight,
+  # toes pointing down. Length 10, ordered like deploy.constants.JOINT_NAMES.
+  motor_zero_rad:
+    - 1.032   # hip_yaw_l     (/dev/ttyUSB0 ID=1)
+    - 1.888   # hip_roll_l    (/dev/ttyUSB1 ID=1)
+    - 1.962   # hip_pitch_l   (/dev/ttyUSB3 ID=0)
+    - 4.019   # knee_pitch_l  (/dev/ttyUSB3 ID=1)
+    - 1.288   # ankle_pitch_l (/dev/ttyUSB3 ID=2)
+    - 0.732   # hip_yaw_r     (/dev/ttyUSB0 ID=2)
+    - 5.858   # hip_roll_r    (/dev/ttyUSB1 ID=0)
+    - 3.120   # hip_pitch_r   (/dev/ttyUSB2 ID=0)
+    - 4.792   # knee_pitch_r  (/dev/ttyUSB2 ID=1)
+    - 4.286   # ankle_pitch_r (/dev/ttyUSB2 ID=2)
+
+  # Per-joint direction. +1 if motor q increases in the same direction as the
+  # URDF joint angle; -1 if reversed. Calibrate by sending a small +0.1 rad
+  # joint command and checking that the joint moves toward the URDF positive
+  # direction. Default = all +1, will adjust per joint after sign calibration.
+  sign:
+    - 1.0   # hip_yaw_l
+    - 1.0   # hip_roll_l
+    - 1.0   # hip_pitch_l
+    - 1.0   # knee_pitch_l
+    - 1.0   # ankle_pitch_l
+    - 1.0   # hip_yaw_r
+    - 1.0   # hip_roll_r
+    - 1.0   # hip_pitch_r
+    - 1.0   # knee_pitch_r
+    - 1.0   # ankle_pitch_r
+
+  # Optional joint-side offset applied as `joint_pos -= offset` after the
+  # motor->joint conversion. Use for fine-tuning if URDF zero capture is
+  # slightly off. null = no extra offset.
   offset: null
+
+# Head motor (USB0 ID=0) — not under policy control. Recorded so deploy code
+# can lock the head at this captured position.
+head:
+  port: /dev/ttyUSB0
+  motor_id: 0
+  hold_motor_rad: 2.497
