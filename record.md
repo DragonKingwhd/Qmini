@@ -1,4 +1,4 @@
-# record.md — Qmini BIRL 双足步态训练系统
+# record.md — Qmini Walk 双足行走训练系统
 
 ## 项目配置和操作指南
 
@@ -12,14 +12,14 @@ conda activate isaaclab
 cd /home/a/Desktop/github/Qmini/Qmini
 pip install -e source/Qmini
 
-# 列出可用环境（确认 Qmini-BIRL-v0 已注册）
+# 列出可用环境（确认 Qmini-Walk-v0 已注册）
 python scripts/list_envs.py
 
 # 运行随机动作测试（验证仿真能启动）
-python3 scripts/random_agent.py --task=Qmini-BIRL-v0 --num_envs 1
+python3 scripts/random_agent.py --task=Qmini-Walk-v0 --num_envs 1
 
 # 运行零动作测试（验证机器人能站立）
-python scripts/zero_agent.py --task=Qmini-BIRL-v0 --num_envs 1
+python scripts/zero_agent.py --task=Qmini-Walk-v0 --num_envs 1
 ```
 
 ### 2. 开始训练
@@ -28,23 +28,23 @@ python scripts/zero_agent.py --task=Qmini-BIRL-v0 --num_envs 1
 cd /home/a/Desktop/github/Qmini/Qmini
 
 # 基础训练（headless，4096 环境，5000 iterations）
-python scripts/rsl_rl/train.py --task=Qmini-BIRL-v0 --headless
+python scripts/rsl_rl/train.py --task=Qmini-Walk-v0 --headless
 
 # 自定义参数训练
-python scripts/rsl_rl/train.py --task=Qmini-BIRL-v0 --num_envs 4096 --max_iterations 5000 --headless
+python scripts/rsl_rl/train.py --task=Qmini-Walk-v0 --num_envs 4096 --max_iterations 5000 --headless
 
 # 带可视化训练（调试用，环境数建议减少）
-python scripts/rsl_rl/train.py --task=Qmini-BIRL-v0 --num_envs 64
+python scripts/rsl_rl/train.py --task=Qmini-Walk-v0 --num_envs 64
 ```
 
 ### 3. 继续上次训练
 
 ```bash
 # 从最新 checkpoint 继续
-python scripts/rsl_rl/train.py --task=Qmini-BIRL-v0 --resume --headless
+python scripts/rsl_rl/train.py --task=Qmini-Walk-v0 --resume --headless
 
 # 从指定 checkpoint 继续
-python scripts/rsl_rl/train.py --task=Qmini-BIRL-v0 --resume \
+python scripts/rsl_rl/train.py --task=Qmini-Walk-v0 --resume \
     --load_run 2026-04-04_xx-xx-xx --load_checkpoint model_2000.pt \
     --max_iterations 5000 --headless
 ```
@@ -53,14 +53,14 @@ python scripts/rsl_rl/train.py --task=Qmini-BIRL-v0 --resume \
 
 ```bash
 # 播放最新模型（可视化）
-python scripts/rsl_rl/play.py --task=Qmini-BIRL-Play-v0 --num_envs 64
+python scripts/rsl_rl/play.py --task=Qmini-Walk-Play-v0 --num_envs 64
 
 # 从指定 checkpoint 播放
-python scripts/rsl_rl/play.py --task=Qmini-BIRL-Play-v0 --num_envs 1 \
+python scripts/rsl_rl/play.py --task=Qmini-Walk-Play-v0 --num_envs 1 \
     --load_run 2026-04-04_xx-xx-xx --load_checkpoint model_5000.pt
 
 # 录制视频
-python scripts/rsl_rl/play.py --task=Qmini-BIRL-Play-v0 --num_envs 1 \
+python scripts/rsl_rl/play.py --task=Qmini-Walk-Play-v0 --num_envs 1 \
     --video --video_length 600 --headless
 ```
 
@@ -68,7 +68,7 @@ python scripts/rsl_rl/play.py --task=Qmini-BIRL-Play-v0 --num_envs 1 \
 
 ```bash
 # 导出最优 checkpoint 为 ONNX
-python scripts/rsl_rl/play.py --task=Qmini-BIRL-Play-v0 --num_envs 1 \
+python scripts/rsl_rl/play.py --task=Qmini-Walk-Play-v0 --num_envs 1 \
     --load_run <run_name> --load_checkpoint model_5000.pt \
     --export_onnx --headless
 ```
@@ -77,10 +77,10 @@ python scripts/rsl_rl/play.py --task=Qmini-BIRL-Play-v0 --num_envs 1 \
 
 ```bash
 # 查看所有训练
-tensorboard --logdir logs/rsl_rl/qmini_birl --port 6006
+tensorboard --logdir logs/rsl_rl/qmini_walk --port 6006
 
 # 查看特定训练
-tensorboard --logdir logs/rsl_rl/qmini_birl/<timestamp> --port 6006
+tensorboard --logdir logs/rsl_rl/qmini_walk/<timestamp> --port 6006
 ```
 
 ---
@@ -89,19 +89,19 @@ tensorboard --logdir logs/rsl_rl/qmini_birl/<timestamp> --port 6006
 
 ### 与 RoboTamer4Qmini（原始 Isaac Gym 版）的区别
 
-| 维度 | RoboTamer4Qmini (Isaac Gym) | Qmini BIRL (本项目, Isaac Lab) |
+| 维度 | RoboTamer4Qmini (Isaac Gym) | Qmini Walk (本项目, Isaac Lab) |
 |------|----------------------------|-------------------------------|
 | 仿真框架 | Isaac Gym (legged_gym) | Isaac Lab (ManagerBasedRLEnv) |
-| 环境基类 | 自定义 LeggedRobotEnv | QminiBIRLEnv (ManagerBasedRLEnv 子类) |
+| 环境基类 | 自定义 LeggedRobotEnv | QminiWalkEnv (ManagerBasedRLEnv 子类) |
 | 配置方式 | Python 类继承 (Base/BIRL) | @configclass 装饰器 (声明式) |
-| 动作系统 | 自定义 BIRLTask.action() | BIRLActionTerm (ActionTerm 子类) |
+| 动作系统 | 自定义 BIRLTask.action() | QminiReferenceGaitAction (ActionTerm 子类) |
 | 观测系统 | 手动 torch.cat + deque 历史 | ObsTerm + history_length=3 (内置) |
 | 奖励系统 | 单函数返回 rew_dict | 29 个独立 RewTerm + 共享状态 |
 | 命令系统 | 自定义 _resample_commands | UniformVelocityCommandCfg (内置) |
 | 域随机化 | 手动在 step 中实现 | EventTermCfg (startup/reset/interval) |
 | 传感器延迟 | DelayDeque (10-50 步) | v1 暂未移植（后续可添加） |
 | 训练框架 | 自定义 PPO | RSL-RL (标准 Isaac Lab 集成) |
-| Gym 注册 | 无 | gymnasium.register("Qmini-BIRL-v0") |
+| Gym 注册 | 无 | gymnasium.register("Qmini-Walk-v0") |
 
 ### 观测空间
 
@@ -350,14 +350,14 @@ hip_yaw_r=-0.4, hip_roll_r=0.1, hip_pitch_r=1.5, knee_pitch_r=-1.0, ankle_pitch_
             └── tasks/manager_based/qmini/
                 ├── __init__.py            # gym.register ★
                 ├── qmini_env_cfg.py       # 环境配置（场景+机器人+MDP全部） ★
-                ├── qmini_env.py           # QminiBIRLEnv 自定义环境类 ★
+                ├── qmini_env.py           # QminiWalkEnv 自定义环境类 ★
                 ├── agents/
                 │   └── rsl_rl_ppo_cfg.py  # PPO 训练参数 ★
                 └── mdp/
                     ├── __init__.py        # MDP 导出 ★
-                    ├── actions.py         # PhaseModulator + BIRLActionTerm ★
-                    ├── observations.py    # Actor/Critic 观测函数 ★
-                    ├── rewards.py         # 29 项奖励函数 ★
+                    ├── actions.py         # 参考步态 + residual 动作 ★
+                    ├── observations.py    # velocity walking 观测函数 ★
+                    ├── rewards.py         # 行走速度/姿态/步态奖励 ★
                     ├── terminations.py    # 终止条件 ★
                     └── events.py          # 域随机化事件 ★
 ```
@@ -368,52 +368,44 @@ hip_yaw_r=-0.4, hip_roll_r=0.1, hip_pitch_r=1.5, knee_pitch_r=-1.0, ankle_pitch_
 
 ## 变更记录
 
-### 2026-04-04 从 RoboTamer4Qmini (Isaac Gym) 迁移到 Isaac Lab
+### 2026-05-10 新建 Qmini-Walk velocity walking 任务
 
 **目标**：
-- 将 RoboTamer4Qmini 的 BIRL（Bio-Inspired Rhythmic Locomotion）训练管线完整迁移到 Isaac Lab 框架
-- 保持原有的相位调制步态生成、29 项奖励函数、域随机化等核心逻辑
-- 适配 Isaac Lab 的 ManagerBasedRLEnv 架构（声明式配置、模块化 MDP）
+- 删除旧的 `Qmini-BIRL-v0` 注册，改为 `Qmini-Walk-v0` / `Qmini-Walk-Play-v0`
+- 参考 `guguji_isaaclab` 的双足行走任务，使用“参考步态 + policy residual”的动作形式
+- 奖励重点改为前向速度跟踪、身体直立、base 高度、左右腿反相、单腿支撑、少滑脚
 
-**创建的文件**（11 个）：
-1. `assets/q1/urdf/q1.urdf` + `meshes/*.STL` — 机器人资产（从 RoboTamer4Qmini 复制）
-2. `mdp/actions.py` — **PhaseModulator** 类 + **BIRLActionTerm**（12 维动作：2 频率 + 10 关节增量）
-3. `mdp/observations.py` — 20+ 自定义观测函数（Actor 49D + Critic 特权信息）
-4. `mdp/rewards.py` — 29 项奖励函数（精确移植源码数学公式）
+**创建/重写的文件**：
+1. `assets/Qmini_ref.usd` — 引用版机器人 USD 资产
+2. `mdp/actions.py` — **QminiReferenceGaitAction**（10 维关节 residual 动作）
+3. `mdp/observations.py` — gait phase 观测补充，其他观测复用 Isaac Lab 内置项
+4. `mdp/rewards.py` — velocity walking 奖励函数
 5. `mdp/terminations.py` — twist_over + height_over
-6. `mdp/events.py` — 域随机化事件占位
+6. `mdp/curriculums.py` — 前向速度课程
 7. `mdp/__init__.py` — 重新导出所有 MDP 模块
-8. `qmini_env.py` — **QminiBIRLEnv**（共享状态计算 + 总奖励裁剪）
+8. `qmini_env.py` — **QminiWalkEnv**
 9. `qmini_env_cfg.py` — 完整环境配置（场景/机器人/命令/观测/奖励/终止/事件）
-10. `agents/rsl_rl_ppo_cfg.py` — PPO 超参数（[512,256] MLP, γ=0.995, 5000 iter）
-11. `__init__.py` — 注册 Qmini-BIRL-v0 和 Qmini-BIRL-Play-v0
+10. `agents/rsl_rl_ppo_cfg.py` — PPO 超参数（[512,256,128] MLP, γ=0.99, 5000 iter）
+11. `__init__.py` — 注册 Qmini-Walk-v0 和 Qmini-Walk-Play-v0
 
 **参考来源**：
-- 机器人 URDF 和网格: `~/Desktop/RoboTamer4Qmini/assets/q1/`
-- 动作逻辑: `~/Desktop/RoboTamer4Qmini/env/tasks/birl_task.py` (action 方法)
-- 观测计算: `~/Desktop/RoboTamer4Qmini/env/tasks/birl_task.py` (pure_observation / pure_critic_observation)
-- 奖励函数: `~/Desktop/RoboTamer4Qmini/env/tasks/birl_task.py` (reward 方法, 29 项)
-- 相位调制器: `~/Desktop/RoboTamer4Qmini/env/utils/phase_modulator.py`
-- 配置参数: `~/Desktop/RoboTamer4Qmini/config/Base.py` + `config/BIRL.py`
-- Isaac Lab 参考: `IsaacLab/source/isaaclab_tasks/.../locomotion/velocity/` (Cassie/H1 配置)
+- `~/Desktop/github/guguji_isaaclab/source/guguji_locomotion/.../locomotion/velocity/`
+- Isaac Lab 内置 locomotion MDP 项
 
 **关键设计决策**：
-- 使用 **ManagerBasedRLEnv 子类** (`QminiBIRLEnv`) 而非纯声明式——因为 29 项奖励共享 `balance_rew`、`static_flag`、`lin_vel_x_norm` 等中间量，需要在 step() 中预计算
-- 用 **自定义 ActionTerm** 实现相位调制器 + 增量动作，而非标准 JointPositionActionCfg——因为原始系统的动作处理涉及频率控制、增量累加、历史缓存等非标准逻辑
-- 用 Isaac Lab 内置 `history_length=3` 实现观测历史堆叠，替代原始的 `deque(maxlen=3)` 手动管理
-- **传感器延迟暂未移植** (v1)——原始系统有 10-50 步随机延迟模拟真实传感器，Isaac Lab 无内置延迟机制，后续可通过自定义 ObsTerm modifier 实现
-- 总奖励裁剪到 `min=0` 在 env subclass 的 `step()` 方法中实现
+- 用参考步态给双足相位先验，策略只学习 residual 修正
+- 初始命令只训练前向速度，课程从 0.10 m/s 增到 0.30 m/s
+- 先用平地训练，粗糙地形/传感器延迟后续再加
 
-**状态**：✅ 代码完成，等待安装和训练测试
+**状态**：✅ 代码完成，任务注册验证通过
 
 ---
 
 ## 待办事项
 
-- [x] 复制机器人资产 (URDF + STL meshes)
-- [x] 实现 PhaseModulator + BIRLActionTerm
-- [x] 实现自定义观测函数
-- [x] 移植 29 项奖励函数
+- [x] 生成引用版 USD 资产
+- [x] 实现 QminiReferenceGaitAction
+- [x] 实现 velocity walking 观测/奖励函数
 - [x] 实现终止条件
 - [x] 配置域随机化
 - [x] 编写环境配置和自定义环境类
