@@ -28,17 +28,29 @@ from __future__ import annotations
 
 import argparse
 import math
+import sys
 import time
 
-from unitree_actuator_sdk import (  # type: ignore
+# unitree_actuator_sdk is a local C-extension at /home/pi/unitree_actuator_sdk/lib.
+# Prepend it so the import works without a system-wide install.
+_SDK_LIB = "/home/pi/unitree_actuator_sdk/lib"
+if _SDK_LIB not in sys.path:
+    sys.path.insert(0, _SDK_LIB)
+
+from unitree_actuator_sdk import (  # type: ignore  # noqa: E402
     MotorCmd,
     MotorData,
     MotorMode,
     MotorType,
     SerialPort,
-    queryGearRatio,
     queryMotorMode,
 )
+try:
+    from unitree_actuator_sdk import queryGearRatio  # type: ignore  # noqa: E402
+except ImportError:
+    def queryGearRatio(_motor_type) -> float:  # noqa: N802
+        # GO-M8010-6 nominal gear ratio (datasheet).
+        return 6.33
 
 MOTOR_TYPE = MotorType.GO_M8010_6
 
