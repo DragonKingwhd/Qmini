@@ -145,7 +145,9 @@ def main() -> None:
         q_held = read_q(serial, args.id)
         delta_sdk = q_held - q0
         print(f"  到位后读数 = {q_held:+.4f} rad (Δ_sdk = {delta_sdk:+.4f})")
-        if abs(delta_sdk) < 0.05 * abs(args.delta):
+        # require both >= 30% of commanded delta AND >= 0.1 rad absolute,
+        # otherwise the "motion" is just sensor noise / fault-state drift
+        if abs(delta_sdk) < max(0.3 * abs(args.delta), 0.1):
             print("\n❌ 电机基本没动 (Δ < 5%)。kp 太软或机械卡住。")
             print(f"   重试时加大 kp，例如 --kp {args.kp * 2:.1f}  --kd {args.kd * 1.5:.1f}")
             print("   现在断电退出，不进入识别问答。")
