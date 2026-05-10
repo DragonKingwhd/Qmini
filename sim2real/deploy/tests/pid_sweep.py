@@ -49,9 +49,10 @@ MOTOR_TYPE = MotorType.GO_M8010_6
 LOOP_HZ = 200.0
 DT = 1.0 / LOOP_HZ
 
-# small grid; total combos = len(KP_GRID) * len(KD_GRID)
-KP_GRID = [0.05, 0.10, 0.20, 0.40, 0.80, 1.50]
-KD_GRID = [0.10, 0.30, 0.80, 2.00]
+# Tighter grid: stick to (kp ≥ kd) region to avoid the kp<<kd resonance
+# that caused 12x oscillation last run.
+KP_GRID = [0.05, 0.10, 0.20, 0.40, 0.80]
+KD_GRID = [0.05, 0.10, 0.20, 0.50]
 
 
 def _make_cmd(motor_id: int, q: float, dq: float, kp: float, kd: float) -> MotorCmd:
@@ -98,7 +99,6 @@ def run_trial(
 ) -> TrialResult:
     res = TrialResult(kp=kp, kd=kd)
     q_target = q0 + delta
-    v_ff = delta / ramp_s
 
     # cleanly wake motor first (zero-gain)
     for _ in range(10):
@@ -107,9 +107,11 @@ def run_trial(
 
     qs: List[float] = []
     cmd_qs: List[float] = []
+    aborted_oscillation = False
 
-    def step(q_cmd: float, dq_cmd: float) -> float:
-        q, _ = _send(serial, _make_cmd(motor_id, q_cmd, dq_cmd, kp, kd))
+    def step(q_cmd: float) -> float:
+        # NO dq feedforward — pure PD on position error.
+        q, _ = _send(serial, _make_cmd(motor_id, q_cmd, 0.0, kp, kd))
         return q
 
     # ramp out
@@ -117,23 +119,37 @@ def run_trial(
     for i in range(n + 1):
         s = i / n
         q_cmd = q0 + delta * s
-        q = step(q_cmd, v_ff)
+        q = step(q_cmd)
         qs.append(q); cmd_qs.append(q_cmd)
+        # early-abort if we see oscillation (|err| > 1.5*delta)
+        if abs(q - q_cmd) > 1.5 * abs(delta):
+            aborted_oscillation = True
+            break
         time.sleep(DT)
-    # hold
-    for _ in range(int(hold_s * LOOP_HZ)):
-        q = step(q_target, 0.0)
-        qs.append(q); cmd_qs.append(q_target)
-        time.sleep(DT)
-    # ramp back
-    for i in range(n + 1):
-        s = i / n
-        q_cmd = q_target - delta * s
-        q = step(q_cmd, -v_ff)
-        qs.append(q); cmd_qs.append(q_cmd)
-        time.sleep(DT)
+    if not aborted_oscillation:
+        # hold
+        for _ in range(int(hold_s * LOOP_HZ)):
+            q = step(q_target)
+            qs.append(q); cmd_qs.append(q_target)
+            if abs(q - q_target) > 1.5 * abs(delta):
+                aborted_oscillation = True
+                break
+            time.sleep(DT)
+    if not aborted_oscillation:
+        # ramp back
+        for i in range(n + 1):
+            s = i / n
+            q_cmd = q_target - delta * s
+            q = step(q_cmd)
+            qs.append(q); cmd_qs.append(q_cmd)
+            if abs(q - q_cmd) > 1.5 * abs(delta):
+                aborted_oscillation = True
+                break
+            time.sleep(DT)
     # disable
     _send(serial, _make_cmd(motor_id, q0, 0.0, 0.0, 0.0))
+    if aborted_oscillation:
+        res.note = "early-abort: oscillation"
 
     if not qs:
         res.aborted = True
@@ -164,6 +180,8 @@ def run_trial(
 def grade(res: TrialResult, expected_move: float) -> str:
     if res.aborted:
         return "ABORT"
+    if "oscillation" in res.note:
+        return "OSC!"
     if res.stale_frac > 0.3:
         return "FAULT"            # motor not responding
     if res.moved < expected_move * 0.3:
