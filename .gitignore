@@ -17,3 +17,8 @@ logs/
 ###相关工具文件###
 .claude
 .vscode
+# Qmini/source/Qmini/Qmini/assets/Qmini_ref.usda
+# 如果想按扩展名忽略，可改为：
+*.usda
+*.usd
+*.stl
