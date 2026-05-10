@@ -115,8 +115,8 @@ def main() -> None:
     p.add_argument("--id", type=int, required=True)
     p.add_argument("--delta", type=float, default=1.0,
                    help="motor-side delta in rad (default 1.0)")
-    p.add_argument("--kp", type=float, default=0.20)
-    p.add_argument("--kd", type=float, default=1.0)
+    p.add_argument("--kp", type=float, default=1.5)
+    p.add_argument("--kd", type=float, default=2.0)
     p.add_argument("--ramp", type=float, default=1.5, help="ramp time (s)")
     p.add_argument("--hold", type=float, default=2.0, help="hold time (s)")
     args = p.parse_args()
@@ -143,7 +143,13 @@ def main() -> None:
         hold(serial, args.id, q0 + args.delta, args.hold, args.kp, args.kd)
 
         q_held = read_q(serial, args.id)
-        print(f"  到位后读数 = {q_held:+.4f} rad (Δ_sdk = {q_held - q0:+.4f})")
+        delta_sdk = q_held - q0
+        print(f"  到位后读数 = {q_held:+.4f} rad (Δ_sdk = {delta_sdk:+.4f})")
+        if abs(delta_sdk) < 0.05 * abs(args.delta):
+            print("\n❌ 电机基本没动 (Δ < 5%)。kp 太软或机械卡住。")
+            print(f"   重试时加大 kp，例如 --kp {args.kp * 2:.1f}  --kd {args.kd * 1.5:.1f}")
+            print("   现在断电退出，不进入识别问答。")
+            return
 
         print("\n👀 请仔细观察这条腿/关节是如何运动的：")
         print("   (a) yaw   — 腿在水平面内向外/向内转（像八字开合）")
