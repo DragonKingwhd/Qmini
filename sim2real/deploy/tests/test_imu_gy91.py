@@ -128,22 +128,32 @@ def main() -> None:
     print(f"Opening /dev/i2c-{I2C_BUS}...")
     with SMBus(I2C_BUS) as bus:
         init_mpu9250(bus)
-        try:
-            bmp = BMP280(bus, BMP280_ADDR)
-        except OSError:
-            print("[BMP280] not found at 0x76, trying 0x77...")
-            bmp = BMP280(bus, 0x77)
+
+        bmp = None
+        for addr in (BMP280_ADDR, 0x77):
+            try:
+                bmp = BMP280(bus, addr)
+                break
+            except OSError:
+                continue
+        if bmp is None:
+            print("[BMP280] not detected at 0x76 or 0x77 — skipping barometer.")
 
         print("\nReading at ~20 Hz. Ctrl+C to stop.\n")
-        print(f"{'ax':>7} {'ay':>7} {'az':>7} | {'gx':>8} {'gy':>8} {'gz':>8} | "
-              f"{'T_imu':>6} | {'T_baro':>6} {'P_hPa':>8}")
+        header = f"{'ax':>7} {'ay':>7} {'az':>7} | {'gx':>8} {'gy':>8} {'gz':>8} | {'T_imu':>6}"
+        if bmp is not None:
+            header += f" | {'T_baro':>6} {'P_hPa':>8}"
+        print(header)
         try:
             while True:
                 acc, gyr, t_imu = read_mpu9250(bus)
-                t_baro, p_hpa = bmp.read()
-                print(f"{acc[0]:+7.3f} {acc[1]:+7.3f} {acc[2]:+7.3f} | "
-                      f"{gyr[0]:+8.2f} {gyr[1]:+8.2f} {gyr[2]:+8.2f} | "
-                      f"{t_imu:6.2f} | {t_baro:6.2f} {p_hpa:8.2f}")
+                line = (f"{acc[0]:+7.3f} {acc[1]:+7.3f} {acc[2]:+7.3f} | "
+                        f"{gyr[0]:+8.2f} {gyr[1]:+8.2f} {gyr[2]:+8.2f} | "
+                        f"{t_imu:6.2f}")
+                if bmp is not None:
+                    t_baro, p_hpa = bmp.read()
+                    line += f" | {t_baro:6.2f} {p_hpa:8.2f}"
+                print(line)
                 time.sleep(0.05)
         except KeyboardInterrupt:
             print("\nStopped.")
