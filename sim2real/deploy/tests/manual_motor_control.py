@@ -49,8 +49,13 @@ LOOP_HZ = 50.0
 DT = 1.0 / LOOP_HZ
 
 STEP_SMALL = 0.10   # motor-side rad
-STEP_LARGE = 0.50
-TARGET_LIMIT_FROM_Q0 = 5.0   # max target deviation from start, motor-side rad
+STEP_LARGE = 0.30   # was 0.50; reduced to slow down accumulation toward limits
+# Max target deviation from q0 (motor-side rad).
+# 1.5 rad motor ≈ 0.24 rad ≈ 13.6° joint side. Most URDF joint limits are
+# ≥ 0.3 rad on the worst side, so this stays safely inside.
+# hip_yaw_l/r have the tightest range (0.8 rad total); even with q0 at the
+# midpoint, +/-1.5 rad motor side = +/-13.6° joint = within 30° total.
+TARGET_LIMIT_FROM_Q0 = 1.5
 
 # (port, motor_id, label)  — full 11-motor list per Qmini mapping
 MOTORS: List[Tuple[str, int, str]] = [
@@ -124,6 +129,8 @@ def control_motor(serial: SerialPort, motor_id: int, label: str) -> str:
     old_term = setup_raw_terminal()
     last_print = 0.0
     return_code = "menu"
+    stale_count = 0
+    last_q = q_now
     try:
         while True:
             t = time.perf_counter()
@@ -165,6 +172,18 @@ def control_motor(serial: SerialPort, motor_id: int, label: str) -> str:
                     q_now, _ = send(serial, make_cmd(motor_id, target, KP, KD))
             except Exception:
                 pass
+
+            # fault detection: q stuck for too long while target keeps changing
+            if mode == "hold" and abs(q_now - last_q) < 1e-4 and abs(q_now - target) > 0.3:
+                stale_count += 1
+            else:
+                stale_count = 0
+            last_q = q_now
+            if stale_count > 50:   # ~1 second of no movement despite big error
+                sys.stdout.write("\n  ⚠️ 电机疑似进入故障态 (q 卡住, err > 0.3 rad). 自动释放并返回菜单.\n")
+                sys.stdout.flush()
+                return_code = "menu"
+                break
 
             # periodic status line (overwrite same line)
             if t - last_print > 0.1:
