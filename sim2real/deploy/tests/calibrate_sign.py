@@ -46,10 +46,10 @@ CONFIG_PATH = REPO_ROOT / "sim2real/config/calibration.yaml"
 
 GEAR_RATIO = 6.33
 MOTOR_TYPE = MotorType.GO_M8010_6
-KP = 1.5
-KD = 1.0
-RAMP_S = 1.8
-HOLD_S = 1.8
+KP = 0.6   # motor side; conservative — easier on stiction-prone clones
+KD = 0.5
+RAMP_S = 3.0   # very slow ramp to avoid current spikes
+HOLD_S = 1.5
 LOOP_HZ = 200.0
 
 JOINT_NAMES = [
@@ -181,7 +181,11 @@ def main() -> None:
 
         q_started_at = motor_zero
         try:
-            # read actual current q first
+            # First send a zero-gain "wake" so motor exits any prior brake/fault.
+            for _ in range(20):
+                send(serials[port], _make_cmd(motor_id, 0.0, 0.0, 0.0))
+                time.sleep(0.01)
+            # read actual current q
             q_now, _ = send(serials[port], _make_cmd(motor_id, motor_zero, 0.0, 0.0))
             print(f"  当前 q = {q_now:+.3f}, motor_zero = {motor_zero:+.3f}")
             if abs(q_now - motor_zero) > 0.5:
