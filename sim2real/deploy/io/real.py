@@ -25,6 +25,7 @@ step and stored in YAML; defaults assume sign=+1 and zero=0.
 from __future__ import annotations
 
 import sys
+import time
 from dataclasses import dataclass, field
 from pathlib import Path
 from typing import Dict, List, Tuple
@@ -33,7 +34,7 @@ import numpy as np
 import yaml
 
 from ..constants import DEFAULT_JOINT_POS_VEC, JOINT_NAMES, NUM_JOINTS
-from .interfaces import JointDriver
+from .interfaces import CommandSource, IMUDriver, JointDriver
 
 _SDK_LIB = "/home/pi/unitree_actuator_sdk/lib"
 if _SDK_LIB not in sys.path:
@@ -249,3 +250,199 @@ class CalibrationCapture:
             serials[m.port].sendRecv(cmd, data)
             out[name] = float(data.q)
         return out
+
+
+# =============================================================================
+# IMU driver — GY-91 (MPU9250 + BMP280) over I2C
+# =============================================================================
+
+try:
+    from smbus2 import SMBus  # type: ignore
+except ImportError:  # pragma: no cover
+    from smbus import SMBus  # type: ignore  # noqa: F401
+
+_MPU_ADDR = 0x68
+_MPU_PWR_MGMT_1 = 0x6B
+_MPU_SMPLRT_DIV = 0x19
+_MPU_CONFIG = 0x1A
+_MPU_GYRO_CONFIG = 0x1B
+_MPU_ACCEL_CONFIG = 0x1C
+_MPU_ACCEL_XOUT_H = 0x3B
+_MPU_WHO_AM_I = 0x75
+
+_ACCEL_LSB_PER_G = 16384.0   # ±2g range
+_GYRO_LSB_PER_DPS = 131.0    # ±250 dps range
+_DEG2RAD = np.pi / 180.0
+
+
+def _to_int16(hi: int, lo: int) -> int:
+    val = (hi << 8) | lo
+    return val - 65536 if val & 0x8000 else val
+
+
+class RealIMU(IMUDriver):
+    """GY-91 (MPU9250) IMU on Raspberry Pi I2C bus.
+
+    Returns body-frame quantities:
+      lin_vel_b   — placeholder, returns zeros (training adds noise on this
+                    channel; revisit with leg-odometry estimator if drift hurts)
+      ang_vel_b   — gyro in rad/s, bias-subtracted
+      proj_g_b    — normalized accelerometer reading (gravity unit vector)
+
+    Axis remap (`axis_perm`, `axis_sign`) maps raw IMU axes → robot body frame
+    (x=forward, y=left, z=up). Defaults are identity — verify on the robot
+    by tilting and watching `proj_g`:
+      - tilt forward  → proj_g[0] should go positive
+      - tilt left     → proj_g[1] should go positive
+      - upright       → proj_g[2] ≈ +1
+    """
+
+    def __init__(
+        self,
+        i2c_bus: int = 1,
+        axis_perm: tuple[int, int, int] = (0, 1, 2),
+        axis_sign: tuple[float, float, float] = (1.0, 1.0, 1.0),
+        gyro_bias: np.ndarray | None = None,
+    ) -> None:
+        self._bus = SMBus(i2c_bus)
+        self._axis_perm = np.asarray(axis_perm, dtype=np.int32)
+        self._axis_sign = np.asarray(axis_sign, dtype=np.float32)
+        self._gyro_bias = (np.zeros(3, dtype=np.float32)
+                          if gyro_bias is None
+                          else np.asarray(gyro_bias, dtype=np.float32))
+        self._init_mpu()
+
+    def _init_mpu(self) -> None:
+        who = self._bus.read_byte_data(_MPU_ADDR, _MPU_WHO_AM_I)
+        print(f"[RealIMU] MPU9250 WHO_AM_I = 0x{who:02X} "
+              f"(expected 0x71; 0x70/0x73 also seen on clones)")
+        self._bus.write_byte_data(_MPU_ADDR, _MPU_PWR_MGMT_1, 0x00)
+        time.sleep(0.05)
+        self._bus.write_byte_data(_MPU_ADDR, _MPU_PWR_MGMT_1, 0x01)  # PLL X gyro
+        self._bus.write_byte_data(_MPU_ADDR, _MPU_SMPLRT_DIV, 0x00)
+        self._bus.write_byte_data(_MPU_ADDR, _MPU_CONFIG, 0x03)       # DLPF 41Hz
+        self._bus.write_byte_data(_MPU_ADDR, _MPU_GYRO_CONFIG, 0x00)  # ±250 dps
+        self._bus.write_byte_data(_MPU_ADDR, _MPU_ACCEL_CONFIG, 0x00) # ±2g
+        time.sleep(0.05)
+
+    def set_gyro_bias(self, bias: np.ndarray) -> None:
+        """Called by calibrate_imu_gyro after the 3s static capture."""
+        self._gyro_bias = np.asarray(bias, dtype=np.float32).reshape(3)
+
+    def _read_raw(self) -> tuple[np.ndarray, np.ndarray]:
+        d = self._bus.read_i2c_block_data(_MPU_ADDR, _MPU_ACCEL_XOUT_H, 14)
+        ax = _to_int16(d[0], d[1]) / _ACCEL_LSB_PER_G
+        ay = _to_int16(d[2], d[3]) / _ACCEL_LSB_PER_G
+        az = _to_int16(d[4], d[5]) / _ACCEL_LSB_PER_G
+        # bytes 6..7 are temperature — skip
+        gx = _to_int16(d[8],  d[9])  / _GYRO_LSB_PER_DPS
+        gy = _to_int16(d[10], d[11]) / _GYRO_LSB_PER_DPS
+        gz = _to_int16(d[12], d[13]) / _GYRO_LSB_PER_DPS
+        accel_g = np.array([ax, ay, az], dtype=np.float32)
+        gyro_dps = np.array([gx, gy, gz], dtype=np.float32)
+        return accel_g, gyro_dps
+
+    def _to_body(self, v_raw: np.ndarray) -> np.ndarray:
+        return (v_raw[self._axis_perm] * self._axis_sign).astype(np.float32)
+
+    def read(self) -> tuple[np.ndarray, np.ndarray, np.ndarray]:
+        accel_g_raw, gyro_dps_raw = self._read_raw()
+
+        ang_vel_b = self._to_body(gyro_dps_raw) * _DEG2RAD - self._gyro_bias
+
+        accel_b = self._to_body(accel_g_raw)
+        n = float(np.linalg.norm(accel_b))
+        if n < 1e-6:
+            proj_g_b = np.array([0.0, 0.0, 1.0], dtype=np.float32)
+        else:
+            proj_g_b = (accel_b / n).astype(np.float32)
+
+        # Placeholder: training had Unoise on this channel, so 0 is acceptable.
+        # Swap in a state estimator (IMU + leg odometry) later if drift hurts.
+        lin_vel_b = np.zeros(3, dtype=np.float32)
+
+        return lin_vel_b, ang_vel_b, proj_g_b
+
+    def close(self) -> None:
+        try:
+            self._bus.close()
+        except Exception:
+            pass
+
+
+# =============================================================================
+# Joystick command source — pygame
+# =============================================================================
+
+class JoystickCommand(CommandSource):
+    """Read [vx, vy, wz] from a USB/Bluetooth gamepad via pygame.
+
+    Default mapping (Xbox-style):
+      left stick Y  → vx  (push forward → +x)
+      left stick X  → vy  (push left → +y)
+      right stick X → wz  (push left → +yaw, i.e. counter-clockwise from above)
+
+    Deadzones, scales, and axis assignment are tunable. If no joystick is
+    connected, ``read()`` returns zeros — so the robot stands still.
+    """
+
+    def __init__(
+        self,
+        vx_scale: float = 0.4,
+        vy_scale: float = 0.3,
+        wz_scale: float = 1.0,
+        deadzone: float = 0.10,
+        axis_vx: int = 1, axis_vx_invert: bool = True,
+        axis_vy: int = 0, axis_vy_invert: bool = True,
+        axis_wz: int = 3, axis_wz_invert: bool = True,
+        joystick_index: int = 0,
+    ) -> None:
+        try:
+            import pygame  # type: ignore
+        except ImportError as e:
+            raise RuntimeError(
+                "JoystickCommand needs pygame: pip install pygame"
+            ) from e
+        self._pygame = pygame
+        pygame.init()
+        pygame.joystick.init()
+
+        self._joy = None
+        if pygame.joystick.get_count() > joystick_index:
+            self._joy = pygame.joystick.Joystick(joystick_index)
+            self._joy.init()
+            print(f"[Joystick] connected: {self._joy.get_name()} "
+                  f"({self._joy.get_numaxes()} axes)")
+        else:
+            print("[Joystick] no device found — commands will be zero.")
+
+        self._vx_s = float(vx_scale)
+        self._vy_s = float(vy_scale)
+        self._wz_s = float(wz_scale)
+        self._dz = float(deadzone)
+        self._a_vx, self._inv_vx = int(axis_vx), bool(axis_vx_invert)
+        self._a_vy, self._inv_vy = int(axis_vy), bool(axis_vy_invert)
+        self._a_wz, self._inv_wz = int(axis_wz), bool(axis_wz_invert)
+
+    def _axis(self, idx: int, invert: bool) -> float:
+        if self._joy is None:
+            return 0.0
+        v = float(self._joy.get_axis(idx))
+        if abs(v) < self._dz:
+            return 0.0
+        v = (v - np.sign(v) * self._dz) / (1.0 - self._dz)  # rescale past deadzone
+        return -v if invert else v
+
+    def read(self) -> np.ndarray:
+        self._pygame.event.pump()
+        vx = self._axis(self._a_vx, self._inv_vx) * self._vx_s
+        vy = self._axis(self._a_vy, self._inv_vy) * self._vy_s
+        wz = self._axis(self._a_wz, self._inv_wz) * self._wz_s
+        return np.array([vx, vy, wz], dtype=np.float32)
+
+    def close(self) -> None:
+        try:
+            self._pygame.joystick.quit()
+            self._pygame.quit()
+        except Exception:
+            pass
