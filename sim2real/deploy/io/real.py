@@ -119,16 +119,18 @@ class UnitreeJointDriver(JointDriver):
         zero_offset_yaml: str | Path | None = None,
         max_target_step_rad: float = 0.30,
         bus_gap_s: float = 0.0006,
+        kp_scale: float = 1.0,
     ) -> None:
         if mapping is None:
             mapping = DEFAULT_MOTOR_MAP
         self._maps: List[MotorMap] = [mapping[n] for n in JOINT_NAMES]
         self._signs = np.array([m.sign for m in self._maps], dtype=np.float32)
         self._zeros = np.array([m.zero_motor_rad for m in self._maps], dtype=np.float32)
-        self._kp = np.array([_gain_for(n, KP_MOTOR_PREFIX) for n in JOINT_NAMES],
-                            dtype=np.float32)
-        self._kd = np.array([_gain_for(n, KD_MOTOR_PREFIX) for n in JOINT_NAMES],
-                            dtype=np.float32)
+        _ks = float(kp_scale)
+        self._kp = _ks * np.array([_gain_for(n, KP_MOTOR_PREFIX) for n in JOINT_NAMES],
+                                  dtype=np.float32)
+        self._kd = _ks * np.array([_gain_for(n, KD_MOTOR_PREFIX) for n in JOINT_NAMES],
+                                  dtype=np.float32)
         self._max_step = float(max_target_step_rad)
         self._bus_gap = float(bus_gap_s)
 
