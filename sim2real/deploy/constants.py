@@ -75,8 +75,33 @@ OBS_DIM = 3 + 3 + 3 + 3 + 10 + 10 + 10 + 2  # 44
 # Used as a final safety clamp on the commanded joint target. ``None`` means
 # "trust whatever the firmware enforces". Override with measured values
 # once mechanical hard stops are characterised.
-JOINT_LIMIT_LOW:  list[float | None] = [None] * 10
-JOINT_LIMIT_HIGH: list[float | None] = [None] * 10
+# Values below mirror q1.urdf <limit lower/upper> in JOINT_NAMES order
+# (the same limits Isaac Lab loaded during training). All DEFAULT_JOINT_POS
+# entries verified to lie inside these ranges.
+JOINT_LIMIT_LOW:  list[float | None] = [
+    -0.1,   # hip_yaw_l
+    -0.3,   # hip_roll_l
+    -2.1,   # hip_pitch_l
+     0.0,   # knee_pitch_l
+    -2.5,   # ankle_pitch_l
+    -0.7,   # hip_yaw_r
+    -0.6,   # hip_roll_r
+     0.0,   # hip_pitch_r
+    -2.1,   # knee_pitch_r
+     0.0,   # ankle_pitch_r
+]
+JOINT_LIMIT_HIGH: list[float | None] = [
+     0.7,   # hip_yaw_l
+     0.6,   # hip_roll_l
+     0.0,   # hip_pitch_l
+     2.1,   # knee_pitch_l
+     0.0,   # ankle_pitch_l
+     0.1,   # hip_yaw_r
+     0.3,   # hip_roll_r
+     2.1,   # hip_pitch_r
+     0.0,   # knee_pitch_r
+     2.5,   # ankle_pitch_r
+]
 
 # ---- Control loop ----
 # Training: sim.dt=0.005, decimation=4 -> step_dt = 0.020 s -> 50 Hz.
