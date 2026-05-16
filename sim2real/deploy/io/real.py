@@ -25,6 +25,7 @@ step and stored in YAML; defaults assume sign=+1 and zero=0.
 from __future__ import annotations
 
 import sys
+import threading
 import time
 from dataclasses import dataclass, field
 from pathlib import Path
@@ -146,6 +147,13 @@ class UnitreeJointDriver(JointDriver):
                 if _q:
                     _order.append(_q.pop(0))
         self._send_order: List[int] = _order
+        # Per-bus motor index lists for PARALLEL transactions: one worker
+        # thread per 485 bus runs concurrently (different USB-serial adapters
+        # are independent). Critical path = busiest bus (3 motors) instead of
+        # all 10 serially → ~50 Hz instead of ~26 Hz.
+        self._bus_motors: Dict[str, List[int]] = {
+            p: list(v) for p, v in _groups.items()
+        }
 
         if zero_offset_yaml is not None:
             self._load_calibration(zero_offset_yaml)
@@ -260,14 +268,37 @@ class UnitreeJointDriver(JointDriver):
             time.sleep(dt)
         print("[soft-start] done; holding DEFAULT")
 
-    # ---- JointDriver API ----
-    def read(self) -> tuple[np.ndarray, np.ndarray]:
-        for i in self._send_order:
-            q, dq = self._send_one(i, self._last_motor_cmd[i], self._kp[i], self._kd[i])
-            self._cached_motor_q[i] = q
-            self._cached_motor_dq[i] = dq
+    # ---- parallel per-bus transaction ----
+    def _txn_bus(self, idxs: List[int], q_tgt: np.ndarray,
+                 kp: np.ndarray, kd: np.ndarray) -> None:
+        """Run all transactions for ONE 485 bus, sequentially (shared bus).
+        Each bus runs in its own thread so buses overlap."""
+        for i in idxs:
+            try:
+                qq, dq = self._send_one(i, float(q_tgt[i]),
+                                        float(kp[i]), float(kd[i]))
+                self._cached_motor_q[i] = qq
+                self._cached_motor_dq[i] = dq
+            except Exception:
+                pass
             if self._bus_gap > 0:
                 time.sleep(self._bus_gap)
+
+    def _parallel(self, q_tgt: np.ndarray,
+                  kp: np.ndarray, kd: np.ndarray) -> None:
+        threads = [
+            threading.Thread(target=self._txn_bus,
+                             args=(idxs, q_tgt, kp, kd), daemon=True)
+            for idxs in self._bus_motors.values()
+        ]
+        for t in threads:
+            t.start()
+        for t in threads:
+            t.join(timeout=0.25)
+
+    # ---- JointDriver API ----
+    def read(self) -> tuple[np.ndarray, np.ndarray]:
+        self._parallel(self._last_motor_cmd, self._kp, self._kd)
         return (
             self._motor_to_joint_q(self._cached_motor_q).astype(np.float32),
             self._motor_to_joint_dq(self._cached_motor_dq).astype(np.float32),
@@ -280,12 +311,7 @@ class UnitreeJointDriver(JointDriver):
         delta = np.clip(target - last_joint, -self._max_step, self._max_step)
         target_clamped = (last_joint + delta).astype(np.float32)
         motor_target = self._joint_to_motor(target_clamped)
-        for i in self._send_order:
-            q, dq = self._send_one(i, motor_target[i], self._kp[i], self._kd[i])
-            self._cached_motor_q[i] = q
-            self._cached_motor_dq[i] = dq
-            if self._bus_gap > 0:
-                time.sleep(self._bus_gap)
+        self._parallel(motor_target, self._kp, self._kd)
         self._last_motor_cmd = motor_target.copy()
 
     def emergency_stop(self) -> None:
