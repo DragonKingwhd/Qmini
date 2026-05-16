@@ -85,6 +85,15 @@ class QminiController:
     def check_pose(self, tol_rad: float = 0.15) -> None:
         check_initial_pose(self.joints, tol_rad=tol_rad)
 
+    def ramp_to_default(self, duration_s: float = 3.0) -> None:
+        """Soft-start: smoothly move from the measured pose to DEFAULT before
+        the policy loop. No-op for drivers without the hook (e.g. mock)."""
+        fn = getattr(self.joints, "ramp_to_default", None)
+        if callable(fn):
+            fn(duration_s=duration_s)
+        else:
+            print("[soft-start] driver has no ramp_to_default; skipped")
+
     # ---- per-step ----
     def step(self) -> StepRecord:
         # 1. read sensors / command

@@ -135,10 +135,15 @@ class UnitreeJointDriver(JointDriver):
         ports = sorted({m.port for m in self._maps})
         self._serials: Dict[str, SerialPort] = {p: SerialPort(p) for p in ports}
 
-        default_joint = np.asarray(DEFAULT_JOINT_POS_VEC, dtype=np.float32)
-        self._last_motor_cmd = self._joint_to_motor(default_joint)
-        self._cached_motor_q = self._last_motor_cmd.copy()
+        # Soft-start: measure the ACTUAL pose at zero torque and treat THAT
+        # as the starting point. Initialising _last_motor_cmd to DEFAULT made
+        # the first read()/check_pose() yank all 10 motors to DEFAULT with full
+        # KP simultaneously → current spike → power cut. Measuring first means
+        # the initial hold command produces ~zero torque.
         self._cached_motor_dq = np.zeros(NUM_JOINTS, dtype=np.float32)
+        measured = self._read_zero_torque(settle_iters=8)
+        self._last_motor_cmd = measured.copy()
+        self._cached_motor_q = measured.copy()
 
     # ---- calibration ----
     def _load_calibration(self, path: str | Path) -> None:
@@ -189,6 +194,51 @@ class UnitreeJointDriver(JointDriver):
         data.motorType = MOTOR_TYPE
         self._serials[m.port].sendRecv(cmd, data)
         return float(data.q), float(data.dq)
+
+    # ---- soft-start ----
+    def _read_zero_torque(self, settle_iters: int = 8) -> np.ndarray:
+        """Send kp=kd=0 (no torque) to all motors a few times and return the
+        measured motor-side q. Raises if any joint never replies, so the
+        caller aborts BEFORE any stiff command is ever sent."""
+        q_out = np.full(NUM_JOINTS, np.nan, dtype=np.float32)
+        for _ in range(max(1, settle_iters)):
+            for i in range(NUM_JOINTS):
+                try:
+                    q, _dq = self._send_one(i, 0.0, 0.0, 0.0)
+                except Exception:
+                    continue
+                if np.isfinite(q) and abs(q) < 1.0e4:
+                    q_out[i] = q
+            time.sleep(0.01)
+        bad = [JOINT_NAMES[i] for i in range(NUM_JOINTS)
+               if not np.isfinite(q_out[i])]
+        if bad:
+            raise RuntimeError(
+                f"soft-start 零力矩读不到回包: {bad}; "
+                f"先确认电机供电/接线/ID 再启动(此前未发任何刚性指令)"
+            )
+        return q_out
+
+    def ramp_to_default(self, duration_s: float = 3.0, hz: float = 50.0) -> None:
+        """Smoothly drive measured pose → DEFAULT_JOINT_POS before the policy
+        loop, so there is no startup snap. Normal PD gains, but tiny per-tick
+        interpolation steps keep torque (and current) bounded."""
+        start_motor = self._read_zero_torque(settle_iters=4)
+        start_joint = self._motor_to_joint_q(start_motor)
+        goal_joint = np.asarray(DEFAULT_JOINT_POS_VEC, dtype=np.float32)
+        self._last_motor_cmd = start_motor.copy()
+        self._cached_motor_q = start_motor.copy()
+        max_err = float(np.max(np.abs(goal_joint - start_joint)))
+        n = max(1, int(round(duration_s * hz)))
+        dt = 1.0 / hz
+        print(f"[soft-start] ramping measured→DEFAULT over {duration_s:.1f}s "
+              f"(max joint err {max_err:.2f} rad)")
+        for k in range(1, n + 1):
+            s = k / n  # 0→1 linear
+            target = (1.0 - s) * start_joint + s * goal_joint
+            self.send_position(target)  # already per-step rate-limited
+            time.sleep(dt)
+        print("[soft-start] done; holding DEFAULT")
 
     # ---- JointDriver API ----
     def read(self) -> tuple[np.ndarray, np.ndarray]:

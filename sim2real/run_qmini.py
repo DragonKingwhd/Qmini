@@ -49,6 +49,10 @@ def main() -> None:
     ap.add_argument("--duration", type=float, default=None,
                     help="Stop after N seconds (default: run until Ctrl+C)")
     ap.add_argument("--skip-imu-calib", action="store_true")
+    ap.add_argument("--no-ramp", action="store_true",
+                    help="Skip the soft-start ramp to DEFAULT (NOT recommended).")
+    ap.add_argument("--ramp-secs", type=float, default=3.0,
+                    help="Soft-start ramp duration (s).")
     args = ap.parse_args()
 
     imu, joints, cmd = _build_mock(args) if args.mock else _build_real(args)
@@ -62,6 +66,10 @@ def main() -> None:
 
     print("[INFO] checking initial joint pose...")
     ctrl.check_pose()
+
+    if not args.no_ramp:
+        print("[INFO] soft-start: ramping measured pose -> DEFAULT...")
+        ctrl.ramp_to_default(duration_s=args.ramp_secs)
 
     if not args.skip_imu_calib:
         print("[INFO] hold robot still for IMU gyro bias calibration (3s)...")
