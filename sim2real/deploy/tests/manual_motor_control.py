@@ -22,12 +22,14 @@ Run:
 
 from __future__ import annotations
 
+import math
 import select
 import sys
 import termios
 import time
 import tty
-from typing import Dict, List, Tuple
+from pathlib import Path
+from typing import Dict, List, NamedTuple, Optional, Tuple
 
 _SDK_LIB = "/home/pi/unitree_actuator_sdk/lib"
 if _SDK_LIB not in sys.path:
@@ -57,20 +59,48 @@ STEP_LARGE = 0.30   # was 0.50; reduced to slow down accumulation toward limits
 # midpoint, +/-1.5 rad motor side = +/-13.6° joint = within 30° total.
 TARGET_LIMIT_FROM_Q0 = 1.5
 
-# (port, motor_id, label)  — full 11-motor list per Qmini mapping
-MOTORS: List[Tuple[str, int, str]] = [
-    ("/dev/ttyUSB0", 0, "head"),
-    ("/dev/ttyUSB0", 1, "hip_yaw_l"),
-    ("/dev/ttyUSB0", 2, "hip_yaw_r"),
-    ("/dev/ttyUSB1", 0, "hip_roll_r"),
-    ("/dev/ttyUSB1", 1, "hip_roll_l"),
-    ("/dev/ttyUSB2", 0, "hip_pitch_r"),
-    ("/dev/ttyUSB2", 1, "knee_pitch_r"),
-    ("/dev/ttyUSB2", 2, "ankle_pitch_r"),
-    ("/dev/ttyUSB3", 0, "hip_pitch_l"),
-    ("/dev/ttyUSB3", 1, "knee_pitch_l"),
-    ("/dev/ttyUSB3", 2, "ankle_pitch_l"),
+class M(NamedTuple):
+    port: str       # 串口总线
+    mid: int        # 该总线上的电机 ID
+    label: str      # constants.JOINT_NAMES 里的名字 (head 除外)
+    zh: str         # 中文部位说明 (方便对着实物找)
+    pidx: Optional[int]  # 在策略 JOINT_NAMES(10)里的序号; head=None 不参与策略
+
+# 全 11 个电机的映射。pidx 对应 deploy.constants.JOINT_NAMES:
+#   0 hip_yaw_l 1 hip_roll_l 2 hip_pitch_l 3 knee_pitch_l 4 ankle_pitch_l
+#   5 hip_yaw_r 6 hip_roll_r 7 hip_pitch_r 8 knee_pitch_r 9 ankle_pitch_r
+MOTORS: List[M] = [
+    M("/dev/ttyUSB0", 0, "head",          "头部 · 不参与策略",            None),
+    M("/dev/ttyUSB0", 1, "hip_yaw_l",     "左腿 · 髋偏航(绕竖轴/内外旋)", 0),
+    M("/dev/ttyUSB0", 2, "hip_yaw_r",     "右腿 · 髋偏航(绕竖轴/内外旋)", 5),
+    M("/dev/ttyUSB1", 0, "hip_roll_r",    "右腿 · 髋横滚(腿内外侧倾)",   6),
+    M("/dev/ttyUSB1", 1, "hip_roll_l",    "左腿 · 髋横滚(腿内外侧倾)",   1),
+    M("/dev/ttyUSB2", 0, "hip_pitch_r",   "右腿 · 髋俯仰(大腿前后抬)",   7),
+    M("/dev/ttyUSB2", 1, "knee_pitch_r",  "右腿 · 膝(小腿前后摆)",       8),
+    M("/dev/ttyUSB2", 2, "ankle_pitch_r", "右腿 · 踝(脚掌背屈/跖屈)",    9),
+    M("/dev/ttyUSB3", 0, "hip_pitch_l",   "左腿 · 髋俯仰(大腿前后抬)",   2),
+    M("/dev/ttyUSB3", 1, "knee_pitch_l",  "左腿 · 膝(小腿前后摆)",       3),
+    M("/dev/ttyUSB3", 2, "ankle_pitch_l", "左腿 · 踝(脚掌背屈/跖屈)",    4),
 ]
+
+# ---- 从 calibration.yaml 读 sign / motor_zero_rad (按 JOINT_NAMES 顺序, 长度10) ----
+_CONFIG_PATH = Path(__file__).resolve().parents[2] / "config" / "calibration.yaml"
+
+
+def load_calib() -> Tuple[Optional[list], Optional[list]]:
+    """返回 (motor_zero_rad[10], sign[10]); 读不到则 (None, None)。"""
+    try:
+        import yaml  # noqa: WPS433
+        cfg = yaml.safe_load(_CONFIG_PATH.read_text()) or {}
+        j = cfg.get("joints", {}) or {}
+        return j.get("motor_zero_rad"), j.get("sign")
+    except Exception:
+        return None, None
+
+
+def q_is_valid(q: float) -> bool:
+    """SDK 没收到回包时 data.q 是未初始化垃圾值(~1e25)。"""
+    return math.isfinite(q) and abs(q) < 1.0e4
 
 
 # ---------- terminal helpers ----------
@@ -110,6 +140,24 @@ def send(serial: SerialPort, cmd: MotorCmd) -> Tuple[float, float]:
     data.motorType = MOTOR_TYPE
     serial.sendRecv(cmd, data)
     return float(data.q), float(data.dq)
+
+
+def wake_read(serial: SerialPort, motor_id: int, tries: int = 8) -> Optional[float]:
+    """连发若干 0 增益指令唤醒电机(脱离 brake/fault)并读到有效 q。
+
+    扫描菜单时单发一次常超时返回垃圾值;这里重试到拿到合法 q 为止,
+    拿不到返回 None(电机未上电/未接/ID 不对)。
+    """
+    last = None
+    for _ in range(tries):
+        try:
+            q, _ = send(serial, make_cmd(motor_id, 0.0, 0.0, 0.0))
+        except Exception:
+            q = float("nan")
+        if q_is_valid(q):
+            last = q
+        time.sleep(0.01)
+    return last
 
 
 # ---------- per-motor control loop ----------
@@ -210,22 +258,38 @@ def control_motor(serial: SerialPort, motor_id: int, label: str) -> str:
 
 # ---------- menu ----------
 def show_menu(serials: Dict[str, SerialPort]) -> None:
-    print("\n" + "=" * 64)
-    print("  Qmini 手动电机控制")
-    print("=" * 64)
-    for i, (port, mid, label) in enumerate(MOTORS):
-        try:
-            q, _ = send(serials[port], make_cmd(mid, 0.0, 0.0, 0.0))
-            print(f"  {i:2d}: {port}  ID={mid}  {label:14s}  q={q:+.3f}")
-        except Exception as e:
-            print(f"  {i:2d}: {port}  ID={mid}  {label:14s}  [ERR {e!r}]")
-    print("   x : 退出")
+    zeros, signs = load_calib()
+    print("\n" + "=" * 84)
+    print("  Qmini 手动电机控制   (序号 | ID | 关节 | 部位 | 策略# | sign | 零位 | 当前q | 偏差)")
+    print("  q = 电机端实测; 零位 = calibration.yaml:motor_zero_rad; 偏差 = q - 零位")
+    print("  '无响应' = 未上电/未接/ID 不符;先确认电机供电再操作")
+    print("=" * 84)
+    last_port = None
+    for i, m in enumerate(MOTORS):
+        if m.port != last_port:
+            print(f"\n  ── 总线 {m.port} ──")
+            last_port = m.port
+        q = wake_read(serials[m.port], m.mid)
+        pidx = "  - " if m.pidx is None else f" #{m.pidx} "
+        if zeros and signs and m.pidx is not None:
+            sgn = f"{signs[m.pidx]:+.0f}"
+            z = zeros[m.pidx]
+            zs = f"{z:+.3f}"
+            ds = f"{q - z:+.3f}" if q is not None else "  -  "
+        else:
+            sgn, zs, ds = " ? ", "  -  ", "  -  "
+        qs = f"{q:+.3f}" if q is not None else "无响应"
+        print(
+            f"  {i:2d} | ID{m.mid} | {m.label:14s} | {m.zh:22s} |"
+            f" {pidx} | {sgn} | {zs} | {qs:>8s} | {ds}"
+        )
+    print("\n   x : 退出")
 
 
 def release_all(serials: Dict[str, SerialPort]) -> None:
-    for port, mid, _label in MOTORS:
+    for m in MOTORS:
         try:
-            send(serials[port], make_cmd(mid, 0.0, 0.0, 0.0))
+            send(serials[m.port], make_cmd(m.mid, 0.0, 0.0, 0.0))
         except Exception:
             pass
 
@@ -246,8 +310,8 @@ def main() -> None:
             except (ValueError, IndexError):
                 print("  无效输入")
                 continue
-            port, motor_id, label = MOTORS[idx]
-            ret = control_motor(serials[port], motor_id, label)
+            m = MOTORS[idx]
+            ret = control_motor(serials[m.port], m.mid, f"{m.label} · {m.zh}")
             if ret == "exit":
                 break
     finally:
