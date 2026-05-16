@@ -44,7 +44,8 @@ def main() -> None:
     ap = argparse.ArgumentParser()
     ap.add_argument("--config", default="config/calibration.yaml")
     ap.add_argument("--ramp-secs", type=float, default=6.0)
-    ap.add_argument("--hold-secs", type=float, default=6.0)
+    ap.add_argument("--hold-secs", type=float, default=0.0,
+                    help="0 = 一直保持直到 Ctrl+C(默认);>0 = 保持N秒后卸力")
     ap.add_argument("--kp-scale", type=float, default=0.4,
                     help="Gain scale (low = safe; raise once it tracks).")
     ap.add_argument("--bus-gap", type=float, default=0.0006)
@@ -71,17 +72,20 @@ def main() -> None:
     try:
         print(f"\n[ramp] 缓慢 {args.ramp_secs}s 去 DEFAULT (低增益,安全)...")
         joints.ramp_to_default(duration_s=args.ramp_secs)
-        print(f"[hold] 保持 DEFAULT {args.hold_secs}s,观察实物 + 下面读数...")
+        if args.hold_secs > 0:
+            print(f"[hold] 保持 DEFAULT {args.hold_secs}s 后自动卸力...")
+        else:
+            print("[hold] 持续保持 DEFAULT —— 按 Ctrl+C 结束卸力")
         t0 = time.perf_counter()
         last = 0.0
-        while time.perf_counter() - t0 < args.hold_secs:
+        while args.hold_secs <= 0 or (time.perf_counter() - t0 < args.hold_secs):
             joints.send_position(default)
             t = time.perf_counter()
             if t - last > 0.5:
                 pos, _ = joints.read()
                 errs = np.abs(pos - default)
                 worst = int(np.argmax(errs))
-                print(f"  t={t - t0:4.1f}s  max|err|={errs.max():.3f} "
+                print(f"  t={t - t0:5.1f}s  max|err|={errs.max():.3f} "
                       f"@{JOINT_NAMES[worst]}")
                 last = t
             time.sleep(0.02)
