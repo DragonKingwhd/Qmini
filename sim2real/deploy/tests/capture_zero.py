@@ -1,16 +1,19 @@
-"""Re-capture joints.motor_zero_rad at the URDF-zero pose.
+"""Re-capture joints.motor_zero_rad — interactive, ONE JOINT AT A TIME.
 
-motor_zero_rad[i] = motor-side q when joint i is at URDF zero (joint_q = 0):
-legs perfectly straight (hips & knees), feet/toes pointing straight DOWN
-(ankle neutral). The deploy driver uses it as:
+motor_zero_rad[i] = motor-side q when joint i is at its zero (the official
+alignment mark / jig position for that joint, i.e. joint_q = 0). The deploy
+driver uses:
     motor_q = motor_zero + sign * joint_q * GEAR_RATIO
-so a wrong/stale motor_zero makes every joint read & command garbage.
+At joint_q = 0 this is just motor_zero = q, so the capture is independent of
+sign — you only need each joint physically at its zero mark.
 
-These GO-M8010-6 zeros can drift after power cycles / manual handling, so
-re-run this whenever joint readings look outside the physical range.
+Workflow:
+    menu of 10 joints → pick one → align THAT joint to its zero mark and hold
+    → Enter → script averages its q (zero torque) → stored & written to
+    calibration.yaml immediately. Repeat any joint, in any order.
 
-SAFETY: this script ONLY ever sends kp=kd=0 (zero torque). It never drives
-the motors. Robot must be SUSPENDED and held by hand at the URDF-zero pose.
+SAFETY: ONLY ever sends kp=kd=0 (zero torque). Never drives the motors.
+Robot SUSPENDED; only the joint being captured needs to be at its mark.
 
 Run:
     cd ~/Desktop/Qmini
@@ -22,7 +25,7 @@ from __future__ import annotations
 import sys
 import time
 from pathlib import Path
-from typing import List, Tuple
+from typing import List, Optional, Tuple
 
 import numpy as np
 import yaml
@@ -49,7 +52,7 @@ JOINT_NAMES = [
     "hip_yaw_r", "hip_roll_r", "hip_pitch_r", "knee_pitch_r", "ankle_pitch_r",
 ]
 
-# (port, motor_id) per JOINT_NAMES entry — same mapping as real.py / calibrate_sign.
+# (port, motor_id) per JOINT_NAMES entry — same mapping as real.py.
 JOINT_PORTS: List[Tuple[str, int]] = [
     ("/dev/ttyUSB0", 1),
     ("/dev/ttyUSB1", 1),
@@ -63,8 +66,8 @@ JOINT_PORTS: List[Tuple[str, int]] = [
     ("/dev/ttyUSB2", 2),
 ]
 
-N_SAMPLES = 40        # averaged for a stable zero
-WAKE_ITERS = 10       # zero-torque packets to wake motors before reading
+N_SAMPLES = 40
+WAKE_ITERS = 10
 
 
 def read_q(serial: SerialPort, motor_id: int) -> float:
@@ -87,73 +90,127 @@ def q_ok(q: float) -> bool:
     return np.isfinite(q) and abs(q) < 1.0e4
 
 
+def load_cfg() -> dict:
+    return yaml.safe_load(CONFIG_PATH.read_text()) or {}
+
+
+def current_zeros(cfg: dict) -> List[Optional[float]]:
+    z = (cfg.get("joints", {}) or {}).get("motor_zero_rad")
+    if isinstance(z, list) and len(z) == len(JOINT_NAMES):
+        return [float(v) for v in z]
+    return [None] * len(JOINT_NAMES)
+
+
+def write_zeros(zeros: List[Optional[float]]) -> None:
+    cfg = load_cfg()
+    old = current_zeros(cfg)
+    merged = [zeros[i] if zeros[i] is not None else old[i]
+              for i in range(len(JOINT_NAMES))]
+    if any(v is None for v in merged):
+        merged = [0.0 if v is None else v for v in merged]
+    cfg.setdefault("joints", {})["motor_zero_rad"] = [float(v) for v in merged]
+    CONFIG_PATH.write_text(yaml.safe_dump(cfg, sort_keys=False, allow_unicode=True))
+
+
+def capture_one(serials, idx: int) -> Optional[float]:
+    port, mid = JOINT_PORTS[idx]
+    name = JOINT_NAMES[idx]
+    print(f"\n>>> 把 [{name}] 对齐到它的零位标记并扶稳(其它关节随意)")
+    input("    对齐后按 Enter 开始采集(Ctrl+C 取消本次)...")
+    print("    唤醒(零力矩)...")
+    for _ in range(WAKE_ITERS):
+        try:
+            read_q(serials[port], mid)
+        except Exception:
+            pass
+        time.sleep(0.01)
+    print(f"    采集 {N_SAMPLES} 次取平均,保持不动...")
+    s: List[float] = []
+    for _ in range(N_SAMPLES):
+        try:
+            q = read_q(serials[port], mid)
+        except Exception:
+            q = float("nan")
+        if q_ok(q):
+            s.append(q)
+        time.sleep(0.01)
+    if len(s) < N_SAMPLES * 0.5:
+        print(f"    ❌ 读不到回包({len(s)}/{N_SAMPLES});查供电/接线/ID。未保存。")
+        return None
+    arr = np.asarray(s, dtype=np.float64)
+    z = round(float(np.mean(arr)), 4)
+    spread = float(np.max(arr) - np.min(arr))
+    tag = "  ⚠️ 抖动大,没扶稳?" if spread > 0.05 else ""
+    print(f"    {name}: zero = {z:+.4f}   (抖动 {spread:.4f}){tag}")
+    return z
+
+
 def main() -> None:
-    print("=" * 64)
-    print("  采集 motor_zero_rad  (URDF 零位)")
-    print("=" * 64)
-    print("⚠️  机器人必须【悬空】。全程零力矩,不会驱动电机。")
-    print("⚠️  用手把机器人摆到【URDF 零位】并保持不动:")
-    print("      · 两条腿完全【伸直】(髋、膝都不弯)")
-    print("      · 脚掌/脚尖【竖直朝下】(踝中位)")
-    print("      · 左右对称")
-    print(f"⚠️  会覆盖 {CONFIG_PATH} 的 joints.motor_zero_rad")
-    input("摆好并扶稳后按 Enter 开始采集...")
+    print("=" * 60)
+    print("  逐关节采集 motor_zero_rad (官方对位标记 = 该关节零位)")
+    print("=" * 60)
+    print("⚠️  机器人【悬空】。全程零力矩,不驱动电机。")
+    print(f"⚠️  每标完一个立即写入 {CONFIG_PATH}")
 
     ports = sorted({p for p, _ in JOINT_PORTS})
     serials = {p: SerialPort(p) for p in ports}
 
-    # wake (zero torque) so the first reads aren't timeout garbage
-    print("\n唤醒电机(零力矩)...")
-    for _ in range(WAKE_ITERS):
-        for port, mid in JOINT_PORTS:
-            try:
-                read_q(serials[port], mid)
-            except Exception:
-                pass
-        time.sleep(0.01)
+    zeros: List[Optional[float]] = [None] * len(JOINT_NAMES)
+    base = current_zeros(load_cfg())
 
-    print(f"采集 {N_SAMPLES} 次取平均(保持机器人不动)...")
-    samples = [[] for _ in range(len(JOINT_NAMES))]
-    for _ in range(N_SAMPLES):
-        for i, (port, mid) in enumerate(JOINT_PORTS):
-            try:
-                q = read_q(serials[port], mid)
-            except Exception:
-                q = float("nan")
-            if q_ok(q):
-                samples[i].append(q)
-        time.sleep(0.01)
+    while True:
+        print("\n" + "-" * 60)
+        for i, n in enumerate(JOINT_NAMES):
+            port, mid = JOINT_PORTS[i]
+            if zeros[i] is not None:
+                st = f"本次已采 {zeros[i]:+.4f}"
+            elif base[i] is not None:
+                st = f"旧值 {base[i]:+.4f}(未重采)"
+            else:
+                st = "未采"
+            print(f"  {i:2d} {n:16s} {port} ID={mid}   {st}")
+        print("  a=依次采全部   w=写入并退出   q=退出(已写的保留)")
+        choice = input("选关节序号 / a / w / q: ").strip().lower()
 
-    zeros: List[float] = []
-    bad: List[str] = []
-    print("\n结果 (motor-side rad):")
-    for i, name in enumerate(JOINT_NAMES):
-        s = samples[i]
-        if len(s) < N_SAMPLES * 0.5:
-            bad.append(name)
-            zeros.append(float("nan"))
-            print(f"  {name:16s}  采样不足({len(s)}/{N_SAMPLES}) ⚠️")
+        if choice in ("q", "quit", "exit"):
+            print("退出。已写入的保留。")
+            return
+        if choice == "w":
+            write_zeros(zeros)
+            print(f"✅ 已写入 {CONFIG_PATH}")
+            return
+        if choice == "a":
+            for i in range(len(JOINT_NAMES)):
+                try:
+                    z = capture_one(serials, i)
+                except KeyboardInterrupt:
+                    print("\n  跳过该关节")
+                    continue
+                if z is not None:
+                    zeros[i] = z
+                    write_zeros(zeros)
+                    print("    (已写盘)")
             continue
-        arr = np.asarray(s, dtype=np.float64)
-        z = float(np.mean(arr))
-        spread = float(np.max(arr) - np.min(arr))
-        zeros.append(round(z, 4))
-        warn = "  ⚠️ 抖动大,机器人没扶稳?" if spread > 0.05 else ""
-        print(f"  {name:16s}  zero = {z:+.4f}   (抖动 {spread:.4f}){warn}")
-
-    if bad:
-        print(f"\n❌ 这些关节读不到回包: {bad};未写入。先查供电/接线再重跑。")
-        return
-
-    cfg = yaml.safe_load(CONFIG_PATH.read_text()) or {}
-    cfg.setdefault("joints", {})["motor_zero_rad"] = [float(z) for z in zeros]
-    CONFIG_PATH.write_text(yaml.safe_dump(cfg, sort_keys=False, allow_unicode=True))
-    print(f"\n✅ 已写入 {CONFIG_PATH}")
-    print("下一步: 悬空跑 run_qmini --debug, 看关节读数是否回到物理范围内、能否跟随。")
+        try:
+            idx = int(choice)
+            if not (0 <= idx < len(JOINT_NAMES)):
+                raise ValueError
+        except ValueError:
+            print("  无效输入")
+            continue
+        try:
+            z = capture_one(serials, idx)
+        except KeyboardInterrupt:
+            print("\n  本次取消")
+            continue
+        if z is not None:
+            zeros[idx] = z
+            write_zeros(zeros)
+            print(f"    ✅ 已写入 {JOINT_NAMES[idx]} = {z:+.4f}")
 
 
 if __name__ == "__main__":
     try:
         main()
     except KeyboardInterrupt:
-        print("\n[中断] 未写入")
+        print("\n[中断]")
