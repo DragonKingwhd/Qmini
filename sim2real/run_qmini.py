@@ -9,7 +9,33 @@ from __future__ import annotations
 import argparse
 from pathlib import Path
 
+import numpy as np
+
+from deploy.constants import JOINT_NAMES
 from deploy.main import QminiController
+
+
+def _print_debug_summary(ctrl) -> None:
+    hist = ctrl.history
+    if not hist:
+        print("[debug] no history recorded")
+        return
+    tgt = np.stack([h.joint_target for h in hist])   # (T, 10)
+    pos = np.stack([h.joint_pos for h in hist])       # (T, 10)
+    print("\n" + "=" * 72)
+    print("  每关节: 指令幅度 (target range) vs 实测幅度 (measured range)")
+    print("  指令大但实测≈0 → 电机/总线没跟上;  指令也≈0 → 策略/步态没让它动")
+    print("=" * 72)
+    print(f"  {'joint':16s} {'cmd_range':>10s} {'meas_range':>11s} "
+          f"{'cmd_min':>8s} {'cmd_max':>8s} {'meas_min':>9s} {'meas_max':>9s}")
+    for i, name in enumerate(JOINT_NAMES):
+        cr = float(tgt[:, i].max() - tgt[:, i].min())
+        mr = float(pos[:, i].max() - pos[:, i].min())
+        flag = "  <-- 指令动了但没跟上" if (cr > 0.10 and mr < 0.02) else ""
+        print(f"  {name:16s} {cr:10.3f} {mr:11.3f} "
+              f"{tgt[:, i].min():8.3f} {tgt[:, i].max():8.3f} "
+              f"{pos[:, i].min():9.3f} {pos[:, i].max():9.3f}{flag}")
+    print("=" * 72)
 
 
 def _build_real(args):
@@ -53,6 +79,9 @@ def main() -> None:
                     help="Skip the soft-start ramp to DEFAULT (NOT recommended).")
     ap.add_argument("--ramp-secs", type=float, default=3.0,
                     help="Soft-start ramp duration (s).")
+    ap.add_argument("--debug", action="store_true",
+                    help="Record history and print per-joint cmd vs measured "
+                         "amplitude summary at the end.")
     args = ap.parse_args()
 
     imu, joints, cmd = _build_mock(args) if args.mock else _build_real(args)
@@ -61,7 +90,7 @@ def main() -> None:
         onnx_path=Path(args.onnx),
         imu=imu, joints=joints, cmd_source=cmd,
         calibration_yaml=Path(args.config) if Path(args.config).exists() else None,
-        record_history=False,
+        record_history=args.debug,
     )
 
     print("[INFO] checking initial joint pose...")
@@ -85,6 +114,11 @@ def main() -> None:
             close = getattr(obj, "close", None)
             if callable(close):
                 close()
+        if args.debug:
+            try:
+                _print_debug_summary(ctrl)
+            except Exception as e:
+                print(f"[debug] summary failed: {e!r}")
 
 
 if __name__ == "__main__":
