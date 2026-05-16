@@ -160,6 +160,26 @@ def wake_read(serial: SerialPort, motor_id: int, tries: int = 8) -> Optional[flo
     return last
 
 
+def wake_status(serial: SerialPort, motor_id: int, tries: int = 8):
+    """同 wake_read,但额外返回 merror(电机错误码,非0=故障锁定)和 temp(℃)。
+    返回 (q|None, merror|None, temp|None)。"""
+    q_out = merr = temp = None
+    for _ in range(tries):
+        data = MotorData()
+        data.motorType = MOTOR_TYPE
+        try:
+            serial.sendRecv(make_cmd(motor_id, 0.0, 0.0, 0.0), data)
+            q = float(data.q)
+        except Exception:
+            q = float("nan")
+        if q_is_valid(q):
+            q_out = q
+            merr = int(data.merror)
+            temp = int(data.temp)
+        time.sleep(0.01)
+    return q_out, merr, temp
+
+
 # ---------- per-motor control loop ----------
 def control_motor(serial: SerialPort, motor_id: int, label: str) -> str:
     """Returns 'menu' to go back, 'exit' to quit."""
@@ -261,15 +281,16 @@ def show_menu(serials: Dict[str, SerialPort]) -> None:
     zeros, signs = load_calib()
     print("\n" + "=" * 84)
     print("  Qmini 手动电机控制   (序号 | ID | 关节 | 部位 | 策略# | sign | 零位 | 当前q | 偏差)")
-    print("  q = 电机端实测; 零位 = calibration.yaml:motor_zero_rad; 偏差 = q - 零位")
-    print("  '无响应' = 未上电/未接/ID 不符;先确认电机供电再操作")
+    print("  q=电机端实测  偏差=q-零位  err=merror(电机错误码,非0=故障锁定→需断电重启)")
+    print("  '无响应'=未上电/未接/ID不符;  err≠0 → 电机能回数据但不执行指令,必须断电清故障")
     print("=" * 84)
     last_port = None
+    n_fault = 0
     for i, m in enumerate(MOTORS):
         if m.port != last_port:
             print(f"\n  ── 总线 {m.port} ──")
             last_port = m.port
-        q = wake_read(serials[m.port], m.mid)
+        q, merr, temp = wake_status(serials[m.port], m.mid)
         pidx = "  - " if m.pidx is None else f" #{m.pidx} "
         if zeros and signs and m.pidx is not None:
             sgn = f"{signs[m.pidx]:+.0f}"
@@ -279,10 +300,21 @@ def show_menu(serials: Dict[str, SerialPort]) -> None:
         else:
             sgn, zs, ds = " ? ", "  -  ", "  -  "
         qs = f"{q:+.3f}" if q is not None else "无响应"
+        if merr is None:
+            es = " - "
+        elif merr == 0:
+            es = " 0 "
+        else:
+            es = f"⚠️{merr}"
+            n_fault += 1
+        ts = f"{temp}℃" if temp is not None else " - "
         print(
             f"  {i:2d} | ID{m.mid} | {m.label:14s} | {m.zh:22s} |"
-            f" {pidx} | {sgn} | {zs} | {qs:>8s} | {ds}"
+            f" {pidx} | {sgn} | {zs} | {qs:>8s} | {ds} | err={es} | {ts}"
         )
+    if n_fault:
+        print(f"\n  🛑 有 {n_fault} 个电机 merror≠0(故障锁定):它们会回数据但不动。")
+        print("     必须【电机断电→等5秒→重新上电】清故障;清完 motor_zero 失效需重采。")
     print("\n   x : 退出")
 
 
