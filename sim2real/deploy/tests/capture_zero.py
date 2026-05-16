@@ -52,6 +52,20 @@ JOINT_NAMES = [
     "hip_yaw_r", "hip_roll_r", "hip_pitch_r", "knee_pitch_r", "ankle_pitch_r",
 ]
 
+# 中文部位说明,和 manual_motor_control 一致,方便对着实物分清左右腿
+JOINT_ZH = [
+    "左腿·髋偏航(绕竖轴/内外旋)",
+    "左腿·髋横滚(腿内外侧倾)",
+    "左腿·髋俯仰(大腿前后抬)",
+    "左腿·膝(小腿前后摆)",
+    "左腿·踝(脚掌背屈/跖屈)",
+    "右腿·髋偏航(绕竖轴/内外旋)",
+    "右腿·髋横滚(腿内外侧倾)",
+    "右腿·髋俯仰(大腿前后抬)",
+    "右腿·膝(小腿前后摆)",
+    "右腿·踝(脚掌背屈/跖屈)",
+]
+
 # (port, motor_id) per JOINT_NAMES entry — same mapping as real.py.
 JOINT_PORTS: List[Tuple[str, int]] = [
     ("/dev/ttyUSB0", 1),
@@ -115,7 +129,7 @@ def write_zeros(zeros: List[Optional[float]]) -> None:
 def capture_one(serials, idx: int) -> Optional[float]:
     port, mid = JOINT_PORTS[idx]
     name = JOINT_NAMES[idx]
-    print(f"\n>>> 把 [{name}] 对齐到它的零位标记并扶稳(其它关节随意)")
+    print(f"\n>>> 把 [{name}] ({JOINT_ZH[idx]}) 对齐到它的零位标记并扶稳(其它关节随意)")
     input("    对齐后按 Enter 开始采集(Ctrl+C 取消本次)...")
     print("    唤醒(零力矩)...")
     for _ in range(WAKE_ITERS):
@@ -159,16 +173,16 @@ def main() -> None:
     base = current_zeros(load_cfg())
 
     while True:
-        print("\n" + "-" * 60)
+        print("\n" + "-" * 72)
         for i, n in enumerate(JOINT_NAMES):
             port, mid = JOINT_PORTS[i]
             if zeros[i] is not None:
-                st = f"本次已采 {zeros[i]:+.4f}"
+                st = f"✅本次已采 {zeros[i]:+.4f}"
             elif base[i] is not None:
                 st = f"旧值 {base[i]:+.4f}(未重采)"
             else:
                 st = "未采"
-            print(f"  {i:2d} {n:16s} {port} ID={mid}   {st}")
+            print(f"  {i:2d}  {JOINT_ZH[i]:22s} {n:14s} {port} ID={mid}  {st}")
         print("  a=依次采全部   w=写入并退出   q=退出(已写的保留)")
         choice = input("选关节序号 / a / w / q: ").strip().lower()
 
