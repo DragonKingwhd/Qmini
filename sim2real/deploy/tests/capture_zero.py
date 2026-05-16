@@ -225,9 +225,56 @@ def capture_zero_pose_all(serials) -> Optional[List[float]]:
     return out
 
 
+# DEFAULT_JOINT_POS,JOINT_NAMES 顺序(= constants.py / 官方 ref_joint_act)
+DEFAULT_POS = [0.4, -0.1, -1.5, 1.0, -1.3, -0.4, 0.1, 1.5, -1.0, 1.3]
+
+
+def solve_sign_from_default(serials, zeros_now: List[float]):
+    """已知 motor_zero(几何零位 z 已采),把机器人摆成 DEFAULT 半蹲,
+    采 q → 每关节 sign = 符号((q-zero)·DEFAULT),幅度|.|/(|DEFAULT|·G)≈1 自检。
+    零力矩,安全,无需判断方向。返回 (signs, ratios) 或 None。"""
+    print("\n>>> 把机器人摆成 DEFAULT 半蹲姿态(就是策略要 hold 的那个蹲姿):")
+    print("    髋俯仰≈±1.5、膝≈±1.0、踝≈∓1.3、髋偏航≈±0.4、髋横滚≈∓0.1")
+    print("    大致摆到位、扶稳即可(只看符号,不要求精确)")
+    input("    摆好后按 Enter 一次性采全部(Ctrl+C 取消)...")
+    for _ in range(WAKE_ITERS):
+        for port, mid in JOINT_PORTS:
+            try:
+                read_q(serials[port], mid)
+            except Exception:
+                pass
+        time.sleep(0.01)
+    acc: List[List[float]] = [[] for _ in JOINT_NAMES]
+    for _ in range(N_SAMPLES):
+        for i, (port, mid) in enumerate(JOINT_PORTS):
+            try:
+                q = read_q(serials[port], mid)
+            except Exception:
+                q = float("nan")
+            if q_ok(q):
+                acc[i].append(q)
+        time.sleep(0.01)
+    signs: List[float] = []
+    for i, name in enumerate(JOINT_NAMES):
+        if len(acc[i]) < N_SAMPLES * 0.5 or zeros_now[i] is None:
+            print(f"    ❌ {name}: 读不到回包或无zero,放弃")
+            return None
+        qd = float(np.mean(acc[i]))
+        dz = qd - float(zeros_now[i])
+        dp = DEFAULT_POS[i]
+        s = 1.0 if (dz * dp) > 0 else -1.0
+        ratio = abs(dz) / (abs(dp) * GEAR_RATIO) if dp != 0 else float("nan")
+        ok = abs(ratio - 1.0) < 0.25
+        flag = "✅" if ok else "⚠️幅度偏离1,zero/姿态不准?"
+        print(f"    {name:14s} q@DEF={qd:+.3f} Δ={dz:+.3f} → sign={s:+.0f} "
+              f"幅度={ratio:.2f} {flag}")
+        signs.append(s)
+    return signs
+
+
 def main() -> None:
     print("=" * 60)
-    print("  标定: z=几何零位法(推荐) / 序号=双限位法(解sign用)")
+    print("  标定: z=几何零位(motor_zero) / d=DEFAULT姿态解sign / 序号=双限位")
     print("=" * 60)
     print("⚠️  机器人【悬空】。全程零力矩,不驱动电机。")
     print("⚠️  每关节顶两头硬限位各采一次;顶时用力抵死别松。")
@@ -277,6 +324,25 @@ def main() -> None:
                 # sign 保持现有(传 None → write_calib 保留旧 sign)
                 write_calib(zeros, [None] * len(JOINT_NAMES))
                 print(f"✅ 几何零位已写入 {CONFIG_PATH}(sign 保持不变)")
+            continue
+        if choice == "d":
+            # 用当前已写入的 zero(本次z采的 或 文件里的旧值)
+            zb = [zeros[i] if zeros[i] is not None else base_z[i]
+                  for i in range(len(JOINT_NAMES))]
+            if any(v is None for v in zb):
+                print("  ⚠️ 还没有 motor_zero,先做 z(几何零位)再做 d")
+                continue
+            try:
+                ss = solve_sign_from_default(serials, zb)
+            except KeyboardInterrupt:
+                print("\n  取消")
+                continue
+            if ss is not None:
+                for i in range(len(JOINT_NAMES)):
+                    signs[i] = ss[i]
+                # zero 保持(传 None → write_calib 保留)
+                write_calib([None] * len(JOINT_NAMES), signs)
+                print(f"✅ sign 已写入 {CONFIG_PATH}(zero 保持不变)")
             continue
         if choice == "w":
             write_calib(zeros, signs)
