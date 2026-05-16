@@ -185,9 +185,49 @@ def capture_joint(serials, idx: int):
     return zero, sign, gear_est
 
 
+def capture_zero_pose_all(serials) -> Optional[List[float]]:
+    """几何零位法:所有关节同时摆到 URDF joint_q=0(腿伸直竖直平行、脚平),
+    一次性采全 10 个 → motor_zero = q(与 sign/齿比/限位都无关,最干净;
+    hip_roll 也一并解决)。返回 10 个 zero,失败返回 None。"""
+    print("\n>>> 几何零位姿态:两腿【完全伸直、竖直向下、左右平行、脚掌放平】")
+    print("    = URDF joint_q=0。摆好扶稳(越准越好,小偏差可后期 offset 微调)")
+    input("    摆好后按 Enter 一次性采全部 10 个(Ctrl+C 取消)...")
+    print("    唤醒(零力矩)...")
+    for _ in range(WAKE_ITERS):
+        for port, mid in JOINT_PORTS:
+            try:
+                read_q(serials[port], mid)
+            except Exception:
+                pass
+        time.sleep(0.01)
+    print(f"    采集 {N_SAMPLES} 次取平均,保持不动...")
+    acc: List[List[float]] = [[] for _ in JOINT_NAMES]
+    for _ in range(N_SAMPLES):
+        for i, (port, mid) in enumerate(JOINT_PORTS):
+            try:
+                q = read_q(serials[port], mid)
+            except Exception:
+                q = float("nan")
+            if q_ok(q):
+                acc[i].append(q)
+        time.sleep(0.01)
+    out: List[float] = []
+    for i, name in enumerate(JOINT_NAMES):
+        if len(acc[i]) < N_SAMPLES * 0.5:
+            print(f"    ❌ {name}: 读不到回包,放弃本次(查供电/接线)")
+            return None
+        arr = np.asarray(acc[i], dtype=np.float64)
+        z = round(float(np.mean(arr)), 4)
+        spread = float(np.max(arr) - np.min(arr))
+        tag = " ⚠️抖" if spread > 0.05 else ""
+        print(f"    {name:14s} motor_zero = {z:+.4f} (抖{spread:.3f}){tag}")
+        out.append(z)
+    return out
+
+
 def main() -> None:
     print("=" * 60)
-    print("  双限位法标定 (解出 motor_zero + sign,自校验齿比)")
+    print("  标定: z=几何零位法(推荐) / 序号=双限位法(解sign用)")
     print("=" * 60)
     print("⚠️  机器人【悬空】。全程零力矩,不驱动电机。")
     print("⚠️  每关节顶两头硬限位各采一次;顶时用力抵死别松。")
@@ -208,19 +248,36 @@ def main() -> None:
         for i, n in enumerate(JOINT_NAMES):
             port, mid = JOINT_PORTS[i]
             if zeros[i] is not None:
-                st = (f"✅ zero={zeros[i]:+.3f} sign={signs[i]:+.0f} "
-                      f"齿比={gears[i]:.2f}")
+                _sg = f"{signs[i]:+.0f}" if signs[i] is not None else (
+                    f"{base_s[i]:+.0f}(旧)" if base_s[i] is not None else "?")
+                _gr = f" 齿比={gears[i]:.2f}" if gears[i] is not None else ""
+                st = f"✅ zero={zeros[i]:+.3f} sign={_sg}{_gr}"
             elif base_z[i] is not None:
                 st = f"旧 zero={base_z[i]:+.3f}(未重标)"
             else:
                 st = "未标"
             print(f"  {i:2d} {JOINT_ZH[i]:22s} {n:14s} {port} ID={mid}  {st}")
-        print("  a=依次全部   w=写入并退出   q=退出(已写的保留)")
-        choice = input("选关节序号 / a / w / q: ").strip().lower()
+        print("  z=几何零位法一次采全部(motor_zero=q, sign保持)  ← 推荐")
+        print("  序号/a=双限位法(主要用来解 sign)  w=写入退出  q=退出")
+        choice = input("z / 序号 / a / w / q: ").strip().lower()
 
         if choice in ("q", "quit", "exit"):
             print("退出。已写入的保留。")
             return
+        if choice == "z":
+            try:
+                zs = capture_zero_pose_all(serials)
+            except KeyboardInterrupt:
+                print("\n  取消")
+                continue
+            if zs is not None:
+                for i in range(len(JOINT_NAMES)):
+                    zeros[i] = zs[i]
+                    gears[i] = None
+                # sign 保持现有(传 None → write_calib 保留旧 sign)
+                write_calib(zeros, [None] * len(JOINT_NAMES))
+                print(f"✅ 几何零位已写入 {CONFIG_PATH}(sign 保持不变)")
+            continue
         if choice == "w":
             write_calib(zeros, signs)
             print(f"✅ 已写入 {CONFIG_PATH}")
