@@ -1,19 +1,22 @@
-"""Re-capture joints.motor_zero_rad — interactive, ONE JOINT AT A TIME.
+"""Re-capture joints.motor_zero_rad — OFFICIAL mechanical-limit method.
 
-motor_zero_rad[i] = motor-side q when joint i is at its zero (the official
-alignment mark / jig position for that joint, i.e. joint_q = 0). The deploy
-driver uses:
-    motor_q = motor_zero + sign * joint_q * GEAR_RATIO
-At joint_q = 0 this is just motor_zero = q, so the capture is independent of
-sign — you only need each joint physically at its zero mark.
+Per Qmini_DIY.pdf §3 机器人零位标记: put the robot in the folded pose of
+figs 3.1–3.3 and rotate EACH joint hard against its MECHANICAL LIMIT (hold it
+there by hand/tool), then record motor q at that limit. At the limit the joint
+angle is a KNOWN constant = LIMIT_POSE[i] (the URDF/official act_pos extreme),
+so the deploy zero is back-computed:
 
-Workflow:
-    menu of 10 joints → pick one → align THAT joint to its zero mark and hold
-    → Enter → script averages its q (zero torque) → stored & written to
-    calibration.yaml immediately. Repeat any joint, in any order.
+    motor_zero[i] = q_limit[i] - sign[i] * LIMIT_POSE[i] * GEAR_RATIO
+
+(NOT motor_zero = q — that only holds at joint_q = 0, which is NOT the official
+reference. Earlier "straight legs" captures were wrong for exactly this reason.)
+
+Workflow: menu of 10 joints → pick one → push THAT joint hard to its mechanical
+limit (folded pose) and hold → Enter → averages q (zero torque) → computes &
+writes motor_zero to calibration.yaml. Repeat any joint, any order.
 
 SAFETY: ONLY ever sends kp=kd=0 (zero torque). Never drives the motors.
-Robot SUSPENDED; only the joint being captured needs to be at its mark.
+Robot SUSPENDED. Hold the joint firmly against its hard stop while sampling.
 
 Run:
     cd ~/Desktop/Qmini
@@ -80,8 +83,35 @@ JOINT_PORTS: List[Tuple[str, int]] = [
     ("/dev/ttyUSB2", 2),
 ]
 
+GEAR_RATIO = 6.33
+
+# 折叠姿态(图 3.1–3.3)下各关节顶到的机械限位角(rad),JOINT_NAMES 顺序。
+# 取自官方 RoboTamerSdk4Qmini config.yaml 的 act_pos 极值(折叠方向)。
+# pitch 链(hip_pitch/knee/ankle)方向明确;hip_yaw/hip_roll 方向为推测,
+# 若标完 --debug 该关节读数不在物理范围内,把对应正负号翻一下重标。
+LIMIT_POSE = [
+    +0.7,   # hip_yaw_l    [-0.1, 0.7]
+    +0.6,   # hip_roll_l   [-0.3, 0.6]
+    -2.1,   # hip_pitch_l  [-2.1, 0.0]
+    +2.1,   # knee_pitch_l [ 0.0, 2.1]
+    -2.5,   # ankle_pitch_l[-2.5, 0.0]
+    -0.7,   # hip_yaw_r    [-0.7, 0.1]
+    -0.6,   # hip_roll_r   [-0.6, 0.3]
+    +2.1,   # hip_pitch_r  [ 0.0, 2.1]
+    -2.1,   # knee_pitch_r [-2.1, 0.0]
+    +2.5,   # ankle_pitch_r[ 0.0, 2.5]
+]
+
 N_SAMPLES = 40
 WAKE_ITERS = 10
+
+
+def load_signs() -> List[float]:
+    cfg = yaml.safe_load(CONFIG_PATH.read_text()) or {}
+    s = (cfg.get("joints", {}) or {}).get("sign")
+    if isinstance(s, list) and len(s) == len(JOINT_NAMES):
+        return [float(v) for v in s]
+    return [1.0] * len(JOINT_NAMES)
 
 
 def read_q(serial: SerialPort, motor_id: int) -> float:
@@ -126,11 +156,13 @@ def write_zeros(zeros: List[Optional[float]]) -> None:
     CONFIG_PATH.write_text(yaml.safe_dump(cfg, sort_keys=False, allow_unicode=True))
 
 
-def capture_one(serials, idx: int) -> Optional[float]:
+def capture_one(serials, idx: int, sign: float) -> Optional[float]:
     port, mid = JOINT_PORTS[idx]
     name = JOINT_NAMES[idx]
-    print(f"\n>>> 把 [{name}] ({JOINT_ZH[idx]}) 对齐到它的零位标记并扶稳(其它关节随意)")
-    input("    对齐后按 Enter 开始采集(Ctrl+C 取消本次)...")
+    lim = LIMIT_POSE[idx]
+    print(f"\n>>> 把 [{name}] ({JOINT_ZH[idx]}) 按官方折叠姿态(图3.1–3.3)"
+          f"\n    顶死到它的机械限位(关节角≈{lim:+.2f} rad),用手/工具抵住别动")
+    input("    抵住后按 Enter 开始采集(Ctrl+C 取消本次)...")
     print("    唤醒(零力矩)...")
     for _ in range(WAKE_ITERS):
         try:
@@ -138,7 +170,7 @@ def capture_one(serials, idx: int) -> Optional[float]:
         except Exception:
             pass
         time.sleep(0.01)
-    print(f"    采集 {N_SAMPLES} 次取平均,保持不动...")
+    print(f"    采集 {N_SAMPLES} 次取平均,顶住别松...")
     s: List[float] = []
     for _ in range(N_SAMPLES):
         try:
@@ -152,23 +184,28 @@ def capture_one(serials, idx: int) -> Optional[float]:
         print(f"    ❌ 读不到回包({len(s)}/{N_SAMPLES});查供电/接线/ID。未保存。")
         return None
     arr = np.asarray(s, dtype=np.float64)
-    z = round(float(np.mean(arr)), 4)
+    q_lim = float(np.mean(arr))
     spread = float(np.max(arr) - np.min(arr))
-    tag = "  ⚠️ 抖动大,没扶稳?" if spread > 0.05 else ""
-    print(f"    {name}: zero = {z:+.4f}   (抖动 {spread:.4f}){tag}")
-    return z
+    # 限位法反算: motor_zero = q_limit - sign * LIMIT_POSE * GEAR
+    motor_zero = round(q_lim - sign * lim * GEAR_RATIO, 4)
+    tag = "  ⚠️ 抖动大,没顶稳?" if spread > 0.05 else ""
+    print(f"    {name}: q@限位={q_lim:+.4f}  sign={sign:+.0f}  "
+          f"limit={lim:+.2f}  →  motor_zero={motor_zero:+.4f}  (抖动{spread:.4f}){tag}")
+    return motor_zero
 
 
 def main() -> None:
     print("=" * 60)
-    print("  逐关节采集 motor_zero_rad (官方对位标记 = 该关节零位)")
+    print("  逐关节采集 motor_zero_rad (官方限位法 Qmini_DIY §3)")
     print("=" * 60)
-    print("⚠️  机器人【悬空】。全程零力矩,不驱动电机。")
-    print(f"⚠️  每标完一个立即写入 {CONFIG_PATH}")
+    print("⚠️  机器人【悬空】,摆成图3.1–3.3折叠姿态。全程零力矩,不驱动电机。")
+    print("⚠️  采每个关节时:把该关节顶死到机械限位、用力抵住别松。")
+    print(f"⚠️  motor_zero = q@限位 - sign·限位角·{GEAR_RATIO};每标完即写 {CONFIG_PATH}")
 
     ports = sorted({p for p, _ in JOINT_PORTS})
     serials = {p: SerialPort(p) for p in ports}
 
+    signs = load_signs()
     zeros: List[Optional[float]] = [None] * len(JOINT_NAMES)
     base = current_zeros(load_cfg())
 
@@ -196,7 +233,7 @@ def main() -> None:
         if choice == "a":
             for i in range(len(JOINT_NAMES)):
                 try:
-                    z = capture_one(serials, i)
+                    z = capture_one(serials, i, signs[i])
                 except KeyboardInterrupt:
                     print("\n  跳过该关节")
                     continue
@@ -213,7 +250,7 @@ def main() -> None:
             print("  无效输入")
             continue
         try:
-            z = capture_one(serials, idx)
+            z = capture_one(serials, idx, signs[idx])
         except KeyboardInterrupt:
             print("\n  本次取消")
             continue
