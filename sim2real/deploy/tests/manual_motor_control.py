@@ -295,7 +295,7 @@ def release_all(serials: Dict[str, SerialPort]) -> None:
 
 
 def main() -> None:
-    ports = sorted({p for p, _, _ in MOTORS})
+    ports = sorted({m.port for m in MOTORS})
     serials: Dict[str, SerialPort] = {p: SerialPort(p) for p in ports}
     try:
         while True:
