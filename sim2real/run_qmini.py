@@ -7,11 +7,27 @@ Pass --mock to fall back to the mock drivers for dry-run on a desktop.
 from __future__ import annotations
 
 import argparse
+import sys
 from pathlib import Path
 
 import numpy as np
 
 from deploy.constants import JOINT_NAMES
+
+_SCRIPT_DIR = Path(__file__).resolve().parent
+
+
+def _resolve(p: str) -> Path | None:
+    """Resolve a path as given, else relative to this script dir (sim2real/).
+    Returns None if it cannot be found anywhere — caller MUST handle that
+    (running with no calibration silently uses sign=+1/zero=0 = jams robot)."""
+    cand = Path(p)
+    if cand.exists():
+        return cand.resolve()
+    alt = _SCRIPT_DIR / p
+    if alt.exists():
+        return alt.resolve()
+    return None
 from deploy.main import QminiController
 
 
@@ -38,11 +54,11 @@ def _print_debug_summary(ctrl) -> None:
     print("=" * 72)
 
 
-def _build_real(args):
+def _build_real(args, cfg_path: Path):
     from deploy.io.real import JoystickCommand, RealIMU, UnitreeJointDriver
     imu = RealIMU(i2c_bus=args.i2c_bus)
     joints = UnitreeJointDriver(
-        zero_offset_yaml=args.config if Path(args.config).exists() else None,
+        zero_offset_yaml=str(cfg_path) if cfg_path is not None else None,
     )
     if args.constant_cmd:
         from deploy.io.mock import ConstantCommand
@@ -82,14 +98,36 @@ def main() -> None:
     ap.add_argument("--debug", action="store_true",
                     help="Record history and print per-joint cmd vs measured "
                          "amplitude summary at the end.")
+    ap.add_argument("--allow-no-calib", action="store_true",
+                    help="DANGEROUS: run even if calibration.yaml not found.")
     args = ap.parse_args()
 
-    imu, joints, cmd = _build_mock(args) if args.mock else _build_real(args)
+    onnx_path = _resolve(args.onnx)
+    cfg_path = _resolve(args.config)
+
+    if not args.mock:
+        if onnx_path is None:
+            sys.exit(f"[FATAL] ONNX not found: {args.onnx!r} "
+                     f"(tried cwd and {_SCRIPT_DIR})")
+        if cfg_path is None and not args.allow_no_calib:
+            sys.exit(
+                "\n" + "!" * 64 +
+                f"\n[FATAL] 标定文件没找到: {args.config!r}"
+                f"\n  试过: ./{args.config}  和  {_SCRIPT_DIR / args.config}"
+                "\n  没有标定会用 sign=+1/zero=0 → 电机全顶死/乱弹(这正是之前的 bug)。"
+                "\n  确认 sim2real/config/calibration.yaml 存在;"
+                "\n  非要无标定测试加 --allow-no-calib(危险)。\n" + "!" * 64)
+        if cfg_path is not None:
+            print(f"[INFO] calibration: {cfg_path}")
+        print(f"[INFO] onnx: {onnx_path}")
+
+    imu, joints, cmd = (_build_mock(args) if args.mock
+                        else _build_real(args, cfg_path))
 
     ctrl = QminiController(
-        onnx_path=Path(args.onnx),
+        onnx_path=onnx_path if onnx_path is not None else Path(args.onnx),
         imu=imu, joints=joints, cmd_source=cmd,
-        calibration_yaml=Path(args.config) if Path(args.config).exists() else None,
+        calibration_yaml=cfg_path,
         record_history=args.debug,
     )
 
