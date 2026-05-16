@@ -117,6 +117,7 @@ class UnitreeJointDriver(JointDriver):
         mapping: Dict[str, MotorMap] | None = None,
         zero_offset_yaml: str | Path | None = None,
         max_target_step_rad: float = 0.30,
+        bus_gap_s: float = 0.0006,
     ) -> None:
         if mapping is None:
             mapping = DEFAULT_MOTOR_MAP
@@ -128,6 +129,23 @@ class UnitreeJointDriver(JointDriver):
         self._kd = np.array([_gain_for(n, KD_MOTOR_PREFIX) for n in JOINT_NAMES],
                             dtype=np.float32)
         self._max_step = float(max_target_step_rad)
+        self._bus_gap = float(bus_gap_s)
+
+        # Bus-interleaved transaction order: never hit the same 485 bus twice
+        # in a row. JOINT_NAMES order hammers ttyUSB3 x3 then ttyUSB2 x3
+        # back-to-back (zero gap) → half-duplex collisions → timeouts/partial
+        # frames. Round-robin across buses so the time spent on OTHER buses
+        # acts as the turnaround gap for each bus.
+        _groups: Dict[str, List[int]] = {}
+        for _i, _m in enumerate(self._maps):
+            _groups.setdefault(_m.port, []).append(_i)
+        _qs = [list(v) for v in _groups.values()]
+        _order: List[int] = []
+        while any(_qs):
+            for _q in _qs:
+                if _q:
+                    _order.append(_q.pop(0))
+        self._send_order: List[int] = _order
 
         if zero_offset_yaml is not None:
             self._load_calibration(zero_offset_yaml)
@@ -202,13 +220,15 @@ class UnitreeJointDriver(JointDriver):
         caller aborts BEFORE any stiff command is ever sent."""
         q_out = np.full(NUM_JOINTS, np.nan, dtype=np.float32)
         for _ in range(max(1, settle_iters)):
-            for i in range(NUM_JOINTS):
+            for i in self._send_order:
                 try:
                     q, _dq = self._send_one(i, 0.0, 0.0, 0.0)
                 except Exception:
                     continue
                 if np.isfinite(q) and abs(q) < 1.0e4:
                     q_out[i] = q
+                if self._bus_gap > 0:
+                    time.sleep(self._bus_gap)
             time.sleep(0.01)
         bad = [JOINT_NAMES[i] for i in range(NUM_JOINTS)
                if not np.isfinite(q_out[i])]
@@ -242,10 +262,12 @@ class UnitreeJointDriver(JointDriver):
 
     # ---- JointDriver API ----
     def read(self) -> tuple[np.ndarray, np.ndarray]:
-        for i in range(NUM_JOINTS):
+        for i in self._send_order:
             q, dq = self._send_one(i, self._last_motor_cmd[i], self._kp[i], self._kd[i])
             self._cached_motor_q[i] = q
             self._cached_motor_dq[i] = dq
+            if self._bus_gap > 0:
+                time.sleep(self._bus_gap)
         return (
             self._motor_to_joint_q(self._cached_motor_q).astype(np.float32),
             self._motor_to_joint_dq(self._cached_motor_dq).astype(np.float32),
@@ -258,10 +280,12 @@ class UnitreeJointDriver(JointDriver):
         delta = np.clip(target - last_joint, -self._max_step, self._max_step)
         target_clamped = (last_joint + delta).astype(np.float32)
         motor_target = self._joint_to_motor(target_clamped)
-        for i in range(NUM_JOINTS):
+        for i in self._send_order:
             q, dq = self._send_one(i, motor_target[i], self._kp[i], self._kd[i])
             self._cached_motor_q[i] = q
             self._cached_motor_dq[i] = dq
+            if self._bus_gap > 0:
+                time.sleep(self._bus_gap)
         self._last_motor_cmd = motor_target.copy()
 
     def emergency_stop(self) -> None:
