@@ -1,5 +1,5 @@
 # Qmini Sim2Real 部署进度记录
-
+  source /home/pi/Desktop/Qmini/sim2real/.venv/bin/activate
 > 我在桌面端能做的代码骨架先全部写完，所有跟实物相关的参数/方向/单位都先用合理默认值。
 > 你晚上回去拿到机器人后照着「待你实物验证」清单逐项核对。
 git add . &&git commit -m"更新"&&git push
