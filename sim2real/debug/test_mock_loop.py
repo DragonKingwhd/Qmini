@@ -1,19 +1,23 @@
 """Run the Qmini control loop against mock drivers and assert basic invariants.
 
 Usage:
-    cd /home/user/Desktop/WHD/Qmini/sim2real
-    python -m deploy.tests.test_mock_loop \
-        --onnx /path/to/exported/policy.onnx \
-        --seconds 5
+    cd ~/Desktop/Qmini
+    python3 sim2real/debug/test_mock_loop.py --onnx sim2real/policy.onnx --seconds 5
 """
 
 from __future__ import annotations
 
 import argparse
+import sys
+from pathlib import Path
 
 import numpy as np
 
-from ..constants import (
+_SIM2REAL = Path(__file__).resolve().parents[1]
+if str(_SIM2REAL) not in sys.path:
+    sys.path.insert(0, str(_SIM2REAL))
+
+from deploy.constants import (  # noqa: E402
     ACTION_DIM,
     CONTROL_HZ,
     DEFAULT_JOINT_POS_VEC,
@@ -22,8 +26,8 @@ from ..constants import (
     NUM_JOINTS,
     OBS_DIM,
 )
-from ..io.mock import ConstantCommand, MockJoints, WigglingIMU
-from ..main import QminiController
+from deploy.io.mock import ConstantCommand, MockJoints, WigglingIMU  # noqa: E402
+from deploy.main import QminiController  # noqa: E402
 
 
 def main() -> None:

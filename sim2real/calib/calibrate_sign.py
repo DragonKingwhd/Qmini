@@ -2,7 +2,9 @@
 
 Prereqs:
     1. calibration.yaml has motor_zero_rad (10 values) populated.
-    2. Robot is hanging in the URDF zero pose (legs vertical, toes down).
+    2. Robot is hanging with legs vertical & parallel (the straight-leg
+       reference pose — NOTE this is ≈ DEFAULT, *not* URDF joint=0, which
+       is the bent-leg CAD pose; see calib/stand_zero.py for exact angles).
     3. Joints can move freely (no fault state on any motor).
 
 What it does:
@@ -15,7 +17,7 @@ What it does:
 
 Run:
     cd ~/Desktop/Qmini
-    python3 sim2real/deploy/tests/calibrate_sign.py
+    python3 sim2real/calib/calibrate_sign.py
 """
 
 from __future__ import annotations
@@ -41,7 +43,7 @@ from unitree_actuator_sdk import (  # type: ignore  # noqa: E402
     queryMotorMode,
 )
 
-REPO_ROOT = Path(__file__).resolve().parents[3]
+REPO_ROOT = Path(__file__).resolve().parents[2]
 CONFIG_PATH = REPO_ROOT / "sim2real/config/calibration.yaml"
 
 GEAR_RATIO = 6.33
@@ -155,7 +157,7 @@ def main() -> None:
     print("=" * 64)
     print("  关节方向 (sign) 标定")
     print("=" * 64)
-    print("⚠️  机器人吊起、当前在 URDF 零位（双腿垂直、对齐、脚尖朝下）。")
+    print("⚠️  机器人吊起、两腿竖直平行自然下垂(直腿参考姿态,≈DEFAULT;不是URDF joint=0)。")
     print("⚠️  使用低增益、小幅运动；任何异常立刻 Ctrl+C。")
     print(f"⚠️  会读写 {CONFIG_PATH}")
     input("按 Enter 继续...")

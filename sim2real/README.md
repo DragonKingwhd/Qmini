@@ -34,29 +34,52 @@
 
 ---
 
+## 每次开机流程（先看这个）
+
+GO-M8010-6 的 q 是相对上电位置的 → **每次断电零位都作废**，开机按这四步走：
+
+```bash
+cd ~/Desktop/Qmini
+# 1. 机器人放台架,两腿伸直竖直、左右平行、脚尖朝前、脚掌放平,上电
+python3 sim2real/calib/stand_zero.py            # 2. 一键重标零位(零力矩,安全)
+python3 sim2real/debug/goto_default.py --kp-scale 0.4   # 3. 低增益验证全关节跟到 DEFAULT
+python3 sim2real/run_qmini.py --constant-cmd --vx 0     # 4. 不断电,直接跑策略
+```
+
+sign / 软限位 / PD 增益不随断电丢失，只有 `motor_zero_rad` 需要每次重标。
+首次标定或机械动过 → 用 `calib/capture_zero.py` 双限位法（见 `calib/readme.md`）。
+
+---
+
 ## 目录结构
 
 ```
 sim2real/
 ├── README.md
-├── run_qmini.py               真机启动脚本（默认 mock，TODO 改成真驱动）
+├── run_qmini.py               真机启动入口(--mock 桌面空跑)
+├── policy.onnx                导出的策略
 ├── config/
-│   └── calibration.yaml       per-robot 标定值（gyro bias / joint offset）
-└── deploy/
-    ├── __init__.py
-    ├── constants.py           关节顺序 / 默认姿态 / 步态参数 / 频率
-    ├── reference_gait.py      训练侧 QminiReferenceGaitAction 的 numpy 端口
-    ├── observation.py         44D 单步观测拼装
-    ├── controller.py          ONNX 推理 + 残差动作后处理
-    ├── calibration.py         IMU gyro bias / 初始姿态检查
-    ├── main.py                50 Hz 主循环 QminiController
-    ├── io/
-    │   ├── __init__.py
-    │   ├── interfaces.py      抽象驱动接口（IMU / Joint / CommandSource）
-    │   └── mock.py            假驱动（无硬件端到端测试用）
-    └── tests/
-        ├── __init__.py
-        └── test_mock_loop.py  Mock 循环测试
+│   └── calibration.yaml       per-robot 标定值(motor_zero/sign/gyro bias)
+├── deploy/                    运行时核心包(只放主循环用到的代码)
+│   ├── constants.py           关节顺序 / 默认姿态 / 步态参数 / 软限位 / 频率
+│   ├── reference_gait.py      训练侧 QminiReferenceGaitAction 的 numpy 端口
+│   ├── observation.py         44D 单步观测拼装
+│   ├── controller.py          ONNX 推理 + 残差动作后处理
+│   ├── calibration.py         IMU gyro bias / 初始姿态检查
+│   ├── main.py                50 Hz 主循环 QminiController
+│   └── io/
+│       ├── interfaces.py      抽象驱动接口(IMU / Joint / CommandSource)
+│       ├── mock.py            假驱动(无硬件端到端测试用)
+│       └── real.py            真驱动(GO-M8010-6 ×10 / GY-91 IMU / 手柄)
+├── calib/                     标定工作流 → 见 calib/readme.md
+│   ├── stand_zero.py          ★每次开机:台架直腿一键零位
+│   ├── capture_zero.py        首次/机械动过:双限位法解 sign+zero
+│   ├── calibrate_sign.py      逐关节看运动方向验 sign
+│   └── fix_hip_roll_zero.py   只补 hip_roll 零位(腿竖直=joint0)
+├── debug/                     硬件调试/单项测试 → 见 debug/readme.md
+├── docs/
+│   └── record.md              测试记录
+└── logs/                      运行日志
 ```
 
 ---
@@ -145,9 +168,10 @@ sim2real/
 退出时（Ctrl+C 或 duration 到）调用 `joints.emergency_stop()`。
 
 ### `run_qmini.py`
-真机启动脚本。当前导入 mock 驱动；写完 `deploy/io/real.py` 后改成真的。
+真机启动脚本。默认用 `deploy/io/real.py` 真驱动，`--mock` 切换到假驱动桌面空跑。
+找不到 `config/calibration.yaml` 会直接退出（无标定 = sign+1/zero=0 = 顶死电机）。
 
-### `deploy/tests/test_mock_loop.py`
+### `debug/test_mock_loop.py`
 不连硬件的端到端测试，验证：
 1. 动作 shape 正确、有限
 2. joint target 在限位内
@@ -219,9 +243,12 @@ class JoystickCommand(CommandSource):
 
 ### 4. 标定（每次开机或机械动过）
 
-启动时 `run_qmini.py` 会自动跑 3 秒静态 gyro 标定，bias 留在内存。如果你想固化：
-把打印出的 bias 填进 `config/calibration.yaml` 的 `imu.gyro_bias`，再用
-`--skip-imu-calib` 启动跳过开机标定。
+**关节零位**：每次上电先跑 `calib/stand_zero.py`（见顶部"每次开机流程"和
+`calib/readme.md`）。机械动过或怀疑零位 → `calib/capture_zero.py` 双限位法重标。
+
+**IMU**：启动时 `run_qmini.py` 会自动跑 3 秒静态 gyro 标定，bias 留在内存。
+如果你想固化：把打印出的 bias 填进 `config/calibration.yaml` 的
+`imu.gyro_bias`，再用 `--skip-imu-calib` 启动跳过开机标定。
 
 ### 5. 启动
 
@@ -240,7 +267,7 @@ python3 run_qmini.py --onnx policy.onnx --vx 0.0 --duration 5
 
 | 项 | 检查办法 |
 |---|---|
-| ☐ Mock 测试通过 | `python -m deploy.tests.test_mock_loop --onnx policy.onnx` 能过 |
+| ☐ Mock 测试通过 | `python3 debug/test_mock_loop.py --onnx policy.onnx` 能过 |
 | ☐ IMU 单位 = SI | 角速度 rad/s（不是 deg/s），线速度 m/s |
 | ☐ IMU 在 body frame | 机器人前倾时 `proj_g[0]` 变正、`ang_vel[1]` 负→正 |
 | ☐ 关节顺序 | `joints.read()` 返回的 `pos[0]` 真的是 `hip_yaw_l` |

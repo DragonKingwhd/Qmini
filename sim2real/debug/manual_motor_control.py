@@ -17,7 +17,7 @@ Safety:
 
 Run:
     cd ~/Desktop/Qmini
-    python3 sim2real/deploy/tests/manual_motor_control.py
+    python3 sim2real/debug/manual_motor_control.py
 """
 
 from __future__ import annotations
@@ -84,7 +84,7 @@ MOTORS: List[M] = [
 ]
 
 # ---- 从 calibration.yaml 读 sign / motor_zero_rad (按 JOINT_NAMES 顺序, 长度10) ----
-_CONFIG_PATH = Path(__file__).resolve().parents[2] / "config" / "calibration.yaml"
+_CONFIG_PATH = Path(__file__).resolve().parents[1] / "config" / "calibration.yaml"
 
 
 def load_calib() -> Tuple[Optional[list], Optional[list]]:

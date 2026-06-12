@@ -12,7 +12,7 @@ Prerequisites:
     pip install smbus2
 
 Run:
-    python3 -m sim2real.deploy.tests.test_imu_gy91
+    python3 sim2real/debug/test_imu_gy91.py
 """
 
 import time

@@ -14,7 +14,7 @@ Workflow:
 
 Run:
     cd ~/Desktop/Qmini
-    python3 sim2real/deploy/tests/identify_axes_manual.py
+    python3 sim2real/debug/identify_axes_manual.py
 """
 
 from __future__ import annotations

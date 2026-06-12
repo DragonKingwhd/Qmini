@@ -9,7 +9,7 @@ joint=0 就是"腿竖直、左右平行、不向内外侧倾"这个姿态 ——
 
 用法(机器人悬空或落地都行,关键是两腿摆竖直平行):
     cd ~/Desktop/Qmini
-    python3 sim2real/deploy/tests/fix_hip_roll_zero.py
+    python3 sim2real/calib/fix_hip_roll_zero.py
 """
 
 from __future__ import annotations
@@ -35,7 +35,7 @@ from unitree_actuator_sdk import (  # type: ignore  # noqa: E402
     queryMotorMode,
 )
 
-REPO_ROOT = Path(__file__).resolve().parents[3]
+REPO_ROOT = Path(__file__).resolve().parents[2]
 CONFIG_PATH = REPO_ROOT / "sim2real/config/calibration.yaml"
 MOTOR_TYPE = MotorType.GO_M8010_6
 

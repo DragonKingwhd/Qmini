@@ -21,7 +21,7 @@ Robot SUSPENDED. Hold the joint FIRMLY against each hard stop while sampling.
 
 Run:
     cd ~/Desktop/Qmini
-    python3 sim2real/deploy/tests/capture_zero.py
+    python3 sim2real/calib/capture_zero.py
 """
 
 from __future__ import annotations
@@ -47,7 +47,7 @@ from unitree_actuator_sdk import (  # type: ignore  # noqa: E402
     queryMotorMode,
 )
 
-REPO_ROOT = Path(__file__).resolve().parents[3]
+REPO_ROOT = Path(__file__).resolve().parents[2]
 CONFIG_PATH = REPO_ROOT / "sim2real/config/calibration.yaml"
 MOTOR_TYPE = MotorType.GO_M8010_6
 GEAR_RATIO = 6.33
@@ -185,44 +185,10 @@ def capture_joint(serials, idx: int):
     return zero, sign, gear_est
 
 
-def capture_zero_pose_all(serials) -> Optional[List[float]]:
-    """几何零位法:所有关节同时摆到 URDF joint_q=0(腿伸直竖直平行、脚平),
-    一次性采全 10 个 → motor_zero = q(与 sign/齿比/限位都无关,最干净;
-    hip_roll 也一并解决)。返回 10 个 zero,失败返回 None。"""
-    print("\n>>> 几何零位姿态:两腿【完全伸直、竖直向下、左右平行、脚掌放平】")
-    print("    = URDF joint_q=0。摆好扶稳(越准越好,小偏差可后期 offset 微调)")
-    input("    摆好后按 Enter 一次性采全部 10 个(Ctrl+C 取消)...")
-    print("    唤醒(零力矩)...")
-    for _ in range(WAKE_ITERS):
-        for port, mid in JOINT_PORTS:
-            try:
-                read_q(serials[port], mid)
-            except Exception:
-                pass
-        time.sleep(0.01)
-    print(f"    采集 {N_SAMPLES} 次取平均,保持不动...")
-    acc: List[List[float]] = [[] for _ in JOINT_NAMES]
-    for _ in range(N_SAMPLES):
-        for i, (port, mid) in enumerate(JOINT_PORTS):
-            try:
-                q = read_q(serials[port], mid)
-            except Exception:
-                q = float("nan")
-            if q_ok(q):
-                acc[i].append(q)
-        time.sleep(0.01)
-    out: List[float] = []
-    for i, name in enumerate(JOINT_NAMES):
-        if len(acc[i]) < N_SAMPLES * 0.5:
-            print(f"    ❌ {name}: 读不到回包,放弃本次(查供电/接线)")
-            return None
-        arr = np.asarray(acc[i], dtype=np.float64)
-        z = round(float(np.mean(arr)), 4)
-        spread = float(np.max(arr) - np.min(arr))
-        tag = " ⚠️抖" if spread > 0.05 else ""
-        print(f"    {name:14s} motor_zero = {z:+.4f} (抖{spread:.3f}){tag}")
-        out.append(z)
-    return out
+# 旧 `z` 几何零位法已删除:它假设"两腿伸直竖直 = joint_q=0",但 URDF origin rpy
+# 预置了俯仰偏置,直腿其实 ≈ DEFAULT(净俯仰 origin+q≈0),joint=0 是弯腿——按 z 法
+# 标出的俯仰零位偏 ~9.5 rad(电机端)→ 发 DEFAULT 即怼硬限位过流(merror=5)。
+# 日常开机重标零位请用: python3 sim2real/calib/stand_zero.py(台架直腿姿态,角度算对了)
 
 
 # DEFAULT_JOINT_POS,JOINT_NAMES 顺序(= constants.py / 官方 ref_joint_act)
@@ -274,7 +240,8 @@ def solve_sign_from_default(serials, zeros_now: List[float]):
 
 def main() -> None:
     print("=" * 60)
-    print("  标定: z=几何零位(motor_zero) / d=DEFAULT姿态解sign / 序号=双限位")
+    print("  标定: 序号/a=双限位(解sign+zero) / d=DEFAULT姿态解sign")
+    print("  (日常开机只重标零位 → 用 calib/stand_zero.py,不用进这里)")
     print("=" * 60)
     print("⚠️  机器人【悬空】。全程零力矩,不驱动电机。")
     print("⚠️  每关节顶两头硬限位各采一次;顶时用力抵死别松。")
@@ -304,26 +271,17 @@ def main() -> None:
             else:
                 st = "未标"
             print(f"  {i:2d} {JOINT_ZH[i]:22s} {n:14s} {port} ID={mid}  {st}")
-        print("  z=几何零位法一次采全部(motor_zero=q, sign保持)  ← 推荐")
-        print("  序号/a=双限位法(主要用来解 sign)  w=写入退出  q=退出")
-        choice = input("z / 序号 / a / w / q: ").strip().lower()
+        print("  序号/a=双限位法(同时解 sign+zero,gear_est≈6.33 自检)")
+        print("  d=DEFAULT姿态解sign  w=写入退出  q=退出")
+        print("  (z 几何零位法已删除:直腿≈DEFAULT 而非 joint0 → 用 calib/stand_zero.py)")
+        choice = input("序号 / a / d / w / q: ").strip().lower()
 
         if choice in ("q", "quit", "exit"):
             print("退出。已写入的保留。")
             return
         if choice == "z":
-            try:
-                zs = capture_zero_pose_all(serials)
-            except KeyboardInterrupt:
-                print("\n  取消")
-                continue
-            if zs is not None:
-                for i in range(len(JOINT_NAMES)):
-                    zeros[i] = zs[i]
-                    gears[i] = None
-                # sign 保持现有(传 None → write_calib 保留旧 sign)
-                write_calib(zeros, [None] * len(JOINT_NAMES))
-                print(f"✅ 几何零位已写入 {CONFIG_PATH}(sign 保持不变)")
+            print("  ⚠️ z 法已删除('直腿=joint0'是错的)。开机重标零位用:")
+            print("     python3 sim2real/calib/stand_zero.py")
             continue
         if choice == "d":
             # 用当前已写入的 zero(本次z采的 或 文件里的旧值)

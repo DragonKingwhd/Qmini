@@ -6,10 +6,10 @@ Setup:
 
 How to run (一次跑一个电机):
     cd ~/Desktop/Qmini
-    python3 sim2real/deploy/tests/identify_motor.py --port /dev/ttyUSB1 --id 0
-    python3 sim2real/deploy/tests/identify_motor.py --port /dev/ttyUSB1 --id 1
-    python3 sim2real/deploy/tests/identify_motor.py --port /dev/ttyUSB0 --id 1
-    python3 sim2real/deploy/tests/identify_motor.py --port /dev/ttyUSB0 --id 2
+    python3 sim2real/debug/identify_motor.py --port /dev/ttyUSB1 --id 0
+    python3 sim2real/debug/identify_motor.py --port /dev/ttyUSB1 --id 1
+    python3 sim2real/debug/identify_motor.py --port /dev/ttyUSB0 --id 1
+    python3 sim2real/debug/identify_motor.py --port /dev/ttyUSB0 --id 2
 
 What it does:
     1. 读当前电机端位置 q0

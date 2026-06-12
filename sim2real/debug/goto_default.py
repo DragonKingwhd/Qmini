@@ -11,8 +11,8 @@ Robot SUSPENDED. Ctrl+C releases all motors.
 
 Run:
     cd ~/Desktop/Qmini
-    python3 sim2real/deploy/tests/goto_default.py            # kp 0.4, ramp 6s
-    python3 sim2real/deploy/tests/goto_default.py --kp-scale 0.7 --hold-secs 8
+    python3 sim2real/debug/goto_default.py            # kp 0.4, ramp 6s
+    python3 sim2real/debug/goto_default.py --kp-scale 0.7 --hold-secs 8
 """
 
 from __future__ import annotations
@@ -24,7 +24,7 @@ from pathlib import Path
 
 import numpy as np
 
-_SIM2REAL = Path(__file__).resolve().parents[2]
+_SIM2REAL = Path(__file__).resolve().parents[1]
 if str(_SIM2REAL) not in sys.path:
     sys.path.insert(0, str(_SIM2REAL))
 

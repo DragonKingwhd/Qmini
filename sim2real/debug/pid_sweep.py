@@ -19,7 +19,7 @@ Setup:
 
 Run:
     cd ~/Desktop/Qmini
-    python3 sim2real/deploy/tests/pid_sweep.py --port /dev/ttyUSB3 --id 1
+    python3 sim2real/debug/pid_sweep.py --port /dev/ttyUSB3 --id 1
         # --id 默认建议: 选膝关节(USB3 ID=1 / USB2 ID=1) 因为限位最宽 (±2.1 rad)
 """
 
