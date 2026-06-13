@@ -56,6 +56,7 @@ class QminiController:
         proj_g_filter: str = "comp",
         proj_g_alpha: float = 0.02,
         single_txn: bool = True,
+        cmd_ramp_s: float = 1.5,
     ) -> None:
         # base_lin_vel(观测前3维)在真机上没有传感器直接给。两种代理:
         #   "zero" — 恒 0(IMU 占位)。命令 vx>0 时与真值差一个常数 → 策略以为
@@ -77,6 +78,8 @@ class QminiController:
         # 单事务模式: 用上一步指令回包当观测(不再单独 read),总线事务/步从 2→1,
         # 循环体压进 20ms → sleep 卡到真 50Hz(否则 42Hz,步态慢 18%)。
         self._single_txn = bool(single_txn)
+        self._cmd_ramp_s = float(cmd_ramp_s)
+        self._run_t0: float | None = None
         # ONNX export from rsl_rl prepends Sub(mean)/Div(std) — feed RAW obs.
         self.policy = ONNXPolicy(onnx_path)
         self.obs_builder = ObservationBuilder()
@@ -152,6 +155,13 @@ class QminiController:
 
         cmd = np.asarray(self.cmd_source.read(), dtype=np.float32).reshape(3)
 
+        # 速度命令软启动: 头 cmd_ramp_s 秒把命令从 0 线性升到目标,消除"命令从0
+        # 突跳到 vx 时策略一激灵后仰"的起步抽搐(实测 vx0.10 起步 proj_g_x→-0.53)。
+        if self._cmd_ramp_s > 0 and self._run_t0 is not None:
+            s = (time.perf_counter() - self._run_t0) / self._cmd_ramp_s
+            if s < 1.0:
+                cmd = cmd * max(0.0, s)
+
         # base_lin_vel 代理: "cmd" 模式喂 [vx,vy,0](见 __init__),闭合速度环。
         if self._linvel_mode == "cmd":
             lin_vel = np.array([cmd[0], cmd[1], 0.0], dtype=np.float32)
@@ -214,6 +224,7 @@ class QminiController:
             hold_on_exit: bool = False) -> None:
         self._running = True
         t_start = time.perf_counter()
+        self._run_t0 = t_start
         n_steps = 0
         try:
             while self._running:
