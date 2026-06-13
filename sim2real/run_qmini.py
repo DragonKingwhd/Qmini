@@ -159,9 +159,10 @@ def main() -> None:
     ap.add_argument("--wz", type=float, default=0.0)
     ap.add_argument("--duration", type=float, default=None,
                     help="Stop after N seconds (default: run until Ctrl+C)")
-    ap.add_argument("--linvel-mode", choices=["zero", "cmd"], default="cmd",
-                    help="机身速度观测来源: cmd=喂命令值(闭速度环,默认,稳) / "
-                         "zero=恒0(旧占位,vx>0 时策略猛蹬后仰)。")
+    ap.add_argument("--linvel-mode", choices=["zero", "cmd"], default="zero",
+                    help="机身速度观测来源: zero=恒0(默认) / cmd=喂命令值。"
+                         "2026-06-13 实测 cmd 反而更快后倒(1.6s vs 9.6s),故默认 zero;"
+                         "两者都顽固后倒 → 主因在物理层(CoM/脚掌)而非速度环。")
     ap.add_argument("--skip-imu-calib", action="store_true")
     ap.add_argument("--skip-imu-check", action="store_true",
                     help="跳过启动时重力方向自检(仅当确知机器人大幅倾斜启动时)。")
