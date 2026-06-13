@@ -60,6 +60,7 @@ def _build_real(args, cfg_path: Path):
     joints = UnitreeJointDriver(
         zero_offset_yaml=str(cfg_path) if cfg_path is not None else None,
         bus_gap_s=args.bus_gap,
+        kp_scale=args.kp_scale,
     )
     if args.constant_cmd:
         from deploy.io.mock import ConstantCommand
@@ -89,6 +90,9 @@ def main() -> None:
     ap.add_argument("--bus-gap", type=float, default=0.002,
                     help="485 per-motor turnaround gap (s). 加了 120Ω 终端电阻后"
                          "可试 0.0006 换余量。")
+    ap.add_argument("--kp-scale", type=float, default=1.0,
+                    help="PD 增益缩放。诊断用:0.4 干净而 1.0 丢包 → 负载电流"
+                         "电气干扰实锤(策略动力学会变,正式跑用 1.0)。")
     ap.add_argument("--vx", type=float, default=0.0)
     ap.add_argument("--vy", type=float, default=0.0)
     ap.add_argument("--wz", type=float, default=0.0)

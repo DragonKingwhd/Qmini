@@ -287,8 +287,12 @@ class UnitreeJointDriver(JointDriver):
             try:
                 qq, dq = self._send_one(i, float(q_tgt[i]),
                                         float(kp[i]), float(kd[i]))
-                self._cached_motor_q[i] = qq
-                self._cached_motor_dq[i] = dq
+                # Reject non-physical jumps (>3 rad motor-side per tick
+                # ≈ 24 rad/s joint side): desynced-but-parseable frames
+                # otherwise poison the obs and the anti-runaway clamp.
+                if abs(qq - float(self._cached_motor_q[i])) < 3.0:
+                    self._cached_motor_q[i] = qq
+                    self._cached_motor_dq[i] = dq
             except Exception:
                 pass
             if self._bus_gap > 0:
@@ -316,7 +320,16 @@ class UnitreeJointDriver(JointDriver):
 
     def send_position(self, target_rad: np.ndarray) -> None:
         target = np.asarray(target_rad, dtype=np.float32).reshape(NUM_JOINTS)
+        # Anti-runaway: never command further than 0.5 rad (joint side) from
+        # the last MEASURED position. During comms dropouts the commanded
+        # target otherwise marches on while the motor stalls, then snaps hard
+        # when frames recover (observed: swings past soft limits). Healthy
+        # tracking error is <0.1 rad, so this never binds in normal operation.
+        meas_joint = self._motor_to_joint_q(self._cached_motor_q)
+        target = np.clip(target, meas_joint - 0.5, meas_joint + 0.5)
         # Per-step rate limit: clamp |new - last_joint_target| ≤ max_step.
+        # Applied AFTER the clamp above, so even a (rare) corrupted
+        # measurement can only move the command by max_step per tick.
         last_joint = self._motor_to_joint_q(self._last_motor_cmd)
         delta = np.clip(target - last_joint, -self._max_step, self._max_step)
         target_clamped = (last_joint + delta).astype(np.float32)
