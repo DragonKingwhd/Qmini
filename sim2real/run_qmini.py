@@ -12,7 +12,7 @@ from pathlib import Path
 
 import numpy as np
 
-from deploy.constants import JOINT_NAMES
+from deploy.constants import DEFAULT_JOINT_POS_VEC, JOINT_NAMES
 
 _SCRIPT_DIR = Path(__file__).resolve().parent
 
@@ -100,6 +100,66 @@ def _write_csv_log(ctrl, out_dir: Path) -> Path | None:
     return path
 
 
+def _save_motor_zeros(cfg_path: Path, zeros) -> None:
+    """把当前(已调平的)电机零位写回 calibration.yaml,保留其它字段,先备份。"""
+    import yaml
+    cfg = yaml.safe_load(Path(cfg_path).read_text()) or {}
+    Path(str(cfg_path) + ".bak").write_text(Path(cfg_path).read_text())
+    cfg.setdefault("joints", {})
+    cfg["joints"]["motor_zero_rad"] = [round(float(z), 4) for z in zeros]
+    Path(cfg_path).write_text(yaml.safe_dump(cfg, sort_keys=False, allow_unicode=True))
+    print(f"\n[save] 已写回 {cfg_path}(备份 .bak)")
+
+
+def _level_feet_interactive(joints, default, cfg_path) -> None:
+    """放地面后交互调平脚掌:微调左右踝电机零位直到两脚平贴、松手能站。
+    调的是 zero(非临时偏移)→ 策略接管命令 DEFAULT 即平脚,无失配。"""
+    import select
+    import termios
+    import time as _t
+    import tty
+
+    GEAR = 6.33
+    STEP_J = 0.02          # 每格关节弧度 ≈ 1.1°
+    L, R = 4, 9            # ankle_pitch_l / ankle_pitch_r 在 JOINT_NAMES 的索引
+    trim_l = trim_r = 0.0
+    fd = sys.stdin.fileno()
+    saved = termios.tcgetattr(fd)
+    print("\n" + "=" * 62)
+    print("  调平脚掌(电机保持 DEFAULT)。把机器人放地面、轻扶:")
+    print("    左踝:  q = +   a = -        右踝:  e = +   d = -   (一格≈1.1°)")
+    print("    目标: 两脚都平贴地面、松手能自主站住")
+    print("    回车 = 满意,启动策略    s = 存盘(写回标定,永久)    x = 放弃退出")
+    print("=" * 62)
+    try:
+        tty.setcbreak(fd)
+        while True:
+            joints.send_position(default)          # 持续保持 DEFAULT(随 zero 走)
+            if select.select([sys.stdin], [], [], 0)[0]:
+                ch = sys.stdin.read(1).lower()
+                if ch in ("\r", "\n"):
+                    break
+                if ch == "x":
+                    raise KeyboardInterrupt
+                if ch == "s":
+                    _save_motor_zeros(cfg_path, joints.get_motor_zeros())
+                elif ch == "q":
+                    joints.bump_motor_zero(L, +STEP_J * GEAR); trim_l += STEP_J
+                elif ch == "a":
+                    joints.bump_motor_zero(L, -STEP_J * GEAR); trim_l -= STEP_J
+                elif ch == "e":
+                    joints.bump_motor_zero(R, +STEP_J * GEAR); trim_r += STEP_J
+                elif ch == "d":
+                    joints.bump_motor_zero(R, -STEP_J * GEAR); trim_r -= STEP_J
+                if ch in ("q", "a", "e", "d"):
+                    print(f"\r  左踝累计={trim_l:+.3f}  右踝累计={trim_r:+.3f} rad "
+                          f"(s存盘/回车启动)   ", end="", flush=True)
+            _t.sleep(0.02)
+    finally:
+        termios.tcsetattr(fd, termios.TCSADRAIN, saved)
+        print()
+
+
 def _build_real(args, cfg_path: Path):
     from deploy.io.real import JoystickCommand, RealIMU, UnitreeJointDriver
     imu = RealIMU(i2c_bus=args.i2c_bus,
@@ -141,6 +201,9 @@ def main() -> None:
                     help="键盘速度控制: w/s=vx±0.05(0~0.3) a/d=wz±0.1(±0.5) 空格=归零。")
     ap.add_argument("--no-wait", action="store_true",
                     help="跳过'保持 DEFAULT 等回车'的确认门,IMU 标定后直接进策略。")
+    ap.add_argument("--level-feet", action="store_true",
+                    help="放地面后进入交互调平:按键微调左右踝零位到两脚平贴、松手能站,"
+                         "回车再启动策略(q/a左踝 e/d右踝 s存盘)。")
     ap.add_argument("--i2c-bus", type=int, default=1)
     # 默认 = real.py RealIMU 已验证的安装朝向(GY-91 绕 y 轴 180°)。之前默认错填
     # (1,1,1) 会覆盖掉 RealIMU 的 -1,1,-1 默认 → 重力符号反 → 必摔。
@@ -256,7 +319,10 @@ def main() -> None:
         print("[INFO] hold robot still for IMU gyro bias calibration (3s)...")
         ctrl.calibrate_imu(duration_s=3.0)
 
-    if not args.mock and not args.no_wait:
+    if not args.mock and args.level_feet:
+        _level_feet_interactive(joints, np.asarray(DEFAULT_JOINT_POS_VEC,
+                                                   dtype=np.float32), cfg_path)
+    elif not args.mock and not args.no_wait:
         print("\n" + "=" * 60)
         print("  电机正以全 PD 刚度保持 DEFAULT(板载闭环,等待期间一直锁住)。")
         print("  现在可以把机器人从台架拿下来放到地面、扶稳。")

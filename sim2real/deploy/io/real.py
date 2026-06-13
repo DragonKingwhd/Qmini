@@ -204,6 +204,16 @@ class UnitreeJointDriver(JointDriver):
                 )
             self._signs = arr
 
+    # ---- live zero trim (脚掌调平用) ----
+    def bump_motor_zero(self, idx: int, delta_motor_rad: float) -> None:
+        """实时微调某关节电机零位。保持 joint=DEFAULT 时,改 zero 会让该关节
+        物理转动 delta/GEAR(关节弧度),用来把脚掌调平(obs 仍读 DEFAULT,与策略
+        一致)。调好可写回 calibration.yaml 永久生效。"""
+        self._zeros[idx] = float(self._zeros[idx]) + float(delta_motor_rad)
+
+    def get_motor_zeros(self) -> np.ndarray:
+        return self._zeros.copy()
+
     # ---- unit conversion ----
     def _joint_to_motor(self, q_joint: np.ndarray) -> np.ndarray:
         return self._zeros + self._signs * q_joint * GEAR_RATIO
