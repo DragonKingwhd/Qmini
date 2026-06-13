@@ -423,8 +423,11 @@ class RealIMU(IMUDriver):
     def __init__(
         self,
         i2c_bus: int = 1,
+        # 2026-06-13 真机 check_imu_frame 验证:GY-91 绕 body y 轴转 180° 安装
+        # (x朝后、z朝下、y朝左),x/z 取负、y 不动。竖直 proj_g≈(0,0,-1)、
+        # 前倾→g[0]+、左倾→g[1]+、左转→wz+ 全部对上。
         axis_perm: tuple[int, int, int] = (0, 1, 2),
-        axis_sign: tuple[float, float, float] = (1.0, 1.0, 1.0),
+        axis_sign: tuple[float, float, float] = (-1.0, 1.0, -1.0),
         gyro_bias: np.ndarray | None = None,
     ) -> None:
         self._bus = SMBus(i2c_bus)
