@@ -30,7 +30,8 @@ motor_q = motor_zero + sign × joint_q × 6.33        (real.py / 所有标定脚
 
 | 场景 | 脚本 | 原理 |
 |---|---|---|
-| **每次开机**（日常） | `stand_zero.py` | 台架直腿姿态 + q_ref 反解 zero。2026-06-13 实测：固件断电**不按**整圈跳，跨断电必走 naive（"⚠️不信任吸附"是正常输出）；2026-06-13 首跑 naive 零位经 goto_default 全✅ |
+| **每次电机上电**（日常，推荐） | `../power_on.py` | 一条龙：stand_zero + goto_default 验证，全✅才放行 |
+| 单独重标零位 | `stand_zero.py` | 台架直腿姿态 + q_ref 反解 zero；有旧 zero 时按 2π 整圈吸附（10 关节表决）。实测：供电稳后跨断电吸附 10/10 通过（断电只丢整圈数，转子相位绝对） |
 | 首次标定 / 机械动过 | `capture_zero.py` 选 `a` | 双限位法：顶两头硬限位 + URDF limit 反解 sign+zero，gear_est≈6.33 自检 |
 | hip_roll 单独补 | `fix_hip_roll_zero.py` | hip_roll 无真硬限位（双限位齿比 18~20 = 垃圾）；腿竖直 = joint0 直接取 q |
 | 验证 sign 方向 | `calibrate_sign.py` | 小幅动每个关节，人眼确认方向 |

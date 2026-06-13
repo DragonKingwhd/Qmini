@@ -41,10 +41,12 @@ GO-M8010-6 的 q 是相对上电位置的 → **每次断电零位都作废**，
 ```bash
 cd ~/Desktop/Qmini
 # 1. 机器人放台架,两腿伸直竖直、左右平行、脚尖朝前、脚掌放平,上电
-python3 sim2real/calib/stand_zero.py            # 2. 一键重标零位(零力矩,安全)
-python3 sim2real/debug/goto_default.py --kp-scale 0.4   # 3. 低增益验证全关节跟到 DEFAULT
-python3 sim2real/run_qmini.py --keyboard                # 4. 不断电,直接跑策略(键盘控制)
+python3 sim2real/power_on.py                # 2. 一条龙:重标零位+低增益验证,全✅才放行
+python3 sim2real/run_qmini.py --keyboard    # 3. 不断电,直接跑策略(键盘控制)
 ```
+
+(`power_on.py` = `calib/stand_zero.py` + `debug/goto_default.py` 串联;
+ 只是 git pull / Pi 重启而电机没断电 → 两步都不用,直接跑 run_qmini。)
 
 第 4 步默认有**确认门**:ramp 到 DEFAULT + IMU 标定后,电机全刚度锁住等你回车——
 此时把机器人从台架拿下来放地面扶稳,回车策略才接管(跳过加 `--no-wait`)。
@@ -62,6 +64,7 @@ sign / 软限位 / PD 增益不随断电丢失，只有 `motor_zero_rad` 需要�
 sim2real/
 ├── README.md
 ├── run_qmini.py               真机启动入口(--mock 桌面空跑)
+├── power_on.py                电机上电后一条龙:重标零位+验证(必跑)
 ├── policy.onnx                导出的策略
 ├── config/
 │   └── calibration.yaml       per-robot 标定值(motor_zero/sign/gyro bias)
