@@ -100,6 +100,9 @@ def main() -> None:
                          "amplitude summary at the end.")
     ap.add_argument("--allow-no-calib", action="store_true",
                     help="DANGEROUS: run even if calibration.yaml not found.")
+    ap.add_argument("--force-pose", action="store_true",
+                    help="DANGEROUS: continue even if initial pose check fails "
+                         "(≈1.0 rad/joint 偏差=电机重启过,零位作废,会怼硬限位过流).")
     args = ap.parse_args()
 
     onnx_path = _resolve(args.onnx)
@@ -132,7 +135,16 @@ def main() -> None:
     )
 
     print("[INFO] checking initial joint pose...")
-    ctrl.check_pose()
+    bad = ctrl.check_pose()
+    if bad and not args.mock and not args.force_pose:
+        sys.exit(
+            "\n" + "!" * 64 +
+            f"\n[FATAL] 关节 {bad} 初始读数偏离 DEFAULT 超过 0.15 rad,拒绝启动。"
+            "\n  偏差 ≈ ±1.0 rad 的整数倍 → 那个电机断电/重启过,零位已作废;"
+            "\n  继续 ramp 会把真实关节怼向硬限位 → 堵转过流 merror=5 快闪。"
+            "\n  处理: 电机电池断电5s重上电(清故障) → 摆台架直腿 →"
+            "\n        python3 sim2real/calib/stand_zero.py → goto_default 验证。"
+            "\n  确认姿态没问题非要跑: 加 --force-pose(危险)。\n" + "!" * 64)
 
     if not args.no_ramp:
         print("[INFO] soft-start: ramping measured pose -> DEFAULT...")

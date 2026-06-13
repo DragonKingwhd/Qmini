@@ -82,8 +82,8 @@ class QminiController:
     def calibrate_imu(self, duration_s: float = 3.0) -> None:
         self._calib.imu_gyro_bias = calibrate_imu_gyro(self.imu, duration_s=duration_s)
 
-    def check_pose(self, tol_rad: float = 0.15) -> None:
-        check_initial_pose(self.joints, tol_rad=tol_rad)
+    def check_pose(self, tol_rad: float = 0.15) -> list[int]:
+        return check_initial_pose(self.joints, tol_rad=tol_rad)
 
     def ramp_to_default(self, duration_s: float = 3.0) -> None:
         """Soft-start: smoothly move from the measured pose to DEFAULT before

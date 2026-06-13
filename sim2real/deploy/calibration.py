@@ -49,19 +49,31 @@ def calibrate_imu_gyro(
     return arr.mean(axis=0).astype(np.float32)
 
 
-def check_initial_pose(joints: JointDriver, tol_rad: float = 0.15) -> None:
-    """Read current joint positions; warn loudly if far from default pose.
+# One rotor turn (2π motor-side) seen joint-side through the 6.33 gearbox.
+# A startup error of ≈ k×0.99 rad means that motor rebooted/power-cycled
+# since calibration (multi-turn count reset) — its motor_zero is stale.
+ROTOR_TURN_JOINT_RAD = 2.0 * np.pi / 6.33  # ≈ 0.9926
+
+
+def check_initial_pose(joints: JointDriver, tol_rad: float = 0.15) -> list[int]:
+    """Read current joint positions; return indices far from default pose.
 
     The policy starts from the default pose; if the robot is not there at
-    startup, the first integration steps will diverge. Meant for operator
-    confirmation, not a hard error.
+    startup, ramping to DEFAULT can physically drive joints into hard stops
+    (overcurrent fault). Caller decides whether to abort.
     """
     pos, _ = joints.read()
     pos = np.asarray(pos, dtype=np.float32)
     ref = np.asarray(DEFAULT_JOINT_POS_VEC, dtype=np.float32)
-    err = np.abs(pos - ref)
-    bad = np.where(err > tol_rad)[0]
+    err = pos - ref
+    bad = np.where(np.abs(err) > tol_rad)[0]
     if len(bad):
         print(f"[WARN] joints {bad.tolist()} differ from default pose by > {tol_rad} rad")
         print(f"       current: {pos.tolist()}")
         print(f"       default: {ref.tolist()}")
+        for i in bad:
+            turns = err[i] / ROTOR_TURN_JOINT_RAD
+            if abs(turns - round(turns)) < 0.2 and round(turns) != 0:
+                print(f"       joint {i}: 偏差 {err[i]:+.3f} rad ≈ {round(turns):+d} 圈转子"
+                      f" → 该电机断电/重启过,motor_zero 已作废,重跑 calib/stand_zero.py")
+    return bad.tolist()
