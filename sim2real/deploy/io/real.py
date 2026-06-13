@@ -328,6 +328,15 @@ class UnitreeJointDriver(JointDriver):
             self._motor_to_joint_dq(self._cached_motor_dq).astype(np.float32),
         )
 
+    def last_measurement(self) -> tuple[np.ndarray, np.ndarray]:
+        """返回上一次总线事务(read 或 send_position)缓存的关节 q/dq,不发新事务。
+        让控制环每步只打一次总线(单事务模式)而非两次 → 循环体减半 → 真 50Hz。
+        测量来自上一步指令的回包(滞后约一步),换取频率回到训练节奏,净收益为正。"""
+        return (
+            self._motor_to_joint_q(self._cached_motor_q).astype(np.float32),
+            self._motor_to_joint_dq(self._cached_motor_dq).astype(np.float32),
+        )
+
     def send_position(self, target_rad: np.ndarray) -> None:
         target = np.asarray(target_rad, dtype=np.float32).reshape(NUM_JOINTS)
         # Anti-runaway: never command further than 0.5 rad (joint side) from

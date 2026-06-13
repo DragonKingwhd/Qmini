@@ -55,6 +55,7 @@ class QminiController:
         linvel_mode: str = "zero",
         proj_g_filter: str = "comp",
         proj_g_alpha: float = 0.02,
+        single_txn: bool = True,
     ) -> None:
         # base_lin_vel(观测前3维)在真机上没有传感器直接给。两种代理:
         #   "zero" — 恒 0(IMU 占位)。命令 vx>0 时与真值差一个常数 → 策略以为
@@ -73,6 +74,9 @@ class QminiController:
         self._proj_g_alpha = float(proj_g_alpha)
         self._g_filt: np.ndarray | None = None
         self._last_step_t: float | None = None
+        # 单事务模式: 用上一步指令回包当观测(不再单独 read),总线事务/步从 2→1,
+        # 循环体压进 20ms → sleep 卡到真 50Hz(否则 42Hz,步态慢 18%)。
+        self._single_txn = bool(single_txn)
         # ONNX export from rsl_rl prepends Sub(mean)/Div(std) — feed RAW obs.
         self.policy = ONNXPolicy(onnx_path)
         self.obs_builder = ObservationBuilder()
@@ -139,7 +143,10 @@ class QminiController:
                 self._g_filt = (g / n if n > 1e-6 else g).astype(np.float32)
             proj_g = self._g_filt
 
-        joint_pos, joint_vel = self.joints.read()
+        if self._single_txn and hasattr(self.joints, "last_measurement"):
+            joint_pos, joint_vel = self.joints.last_measurement()
+        else:
+            joint_pos, joint_vel = self.joints.read()
         joint_pos = np.asarray(joint_pos, dtype=np.float32) - self._calib.joint_offset
         joint_vel = np.asarray(joint_vel, dtype=np.float32)
 

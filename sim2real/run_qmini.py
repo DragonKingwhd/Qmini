@@ -235,6 +235,9 @@ def main() -> None:
                     help="IMU 轴重排到 body(x前y左z上)。先用 debug/check_imu_frame.py 验。")
     ap.add_argument("--imu-sign", type=float, nargs=3, default=[-1.0, 1.0, -1.0],
                     help="IMU 各 body 轴乘 ±1(配合 --imu-perm)。")
+    ap.add_argument("--two-txn", action="store_true",
+                    help="每步打两次总线(读+发,旧行为,~42Hz)。默认单事务: 用指令回包"
+                         "当观测,每步一次总线 → 真 50Hz(步态回训练节奏)。")
     ap.add_argument("--bus-gap", type=float, default=0.002,
                     help="485 per-motor turnaround gap (s). 加了 120Ω 终端电阻后"
                          "可试 0.0006 换余量。")
@@ -301,6 +304,7 @@ def main() -> None:
         record_history=args.debug or args.log,
         linvel_mode=args.linvel_mode,
         proj_g_filter=args.projg_filter,
+        single_txn=not args.two_txn,
     )
 
     if not args.mock and not args.skip_imu_check:
