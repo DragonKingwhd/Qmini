@@ -203,7 +203,8 @@ class QminiController:
         return rec
 
     # ---- main loop ----
-    def run(self, duration_s: float | None = None) -> None:
+    def run(self, duration_s: float | None = None,
+            hold_on_exit: bool = False) -> None:
         self._running = True
         t_start = time.perf_counter()
         n_steps = 0
@@ -219,10 +220,13 @@ class QminiController:
                     time.sleep(sleep_s)
         finally:
             self._running = False
-            try:
-                self.joints.emergency_stop()
-            except Exception as e:
-                print(f"[WARN] emergency_stop failed: {e!r}")
+            # hold_on_exit: 不卸力,电机板载 PD 继续保持最后一条指令,由调用方
+            # 平滑回 DEFAULT 再保持(防策略停了突然瘫倒)。否则立即卸力。
+            if not hold_on_exit:
+                try:
+                    self.joints.emergency_stop()
+                except Exception as e:
+                    print(f"[WARN] emergency_stop failed: {e!r}")
             elapsed = time.perf_counter() - t_start
             rate = n_steps / elapsed if elapsed > 0 else 0.0
             print(f"[INFO] stopped: {n_steps} steps in {elapsed:.1f} s ({rate:.1f} Hz)")

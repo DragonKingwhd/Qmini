@@ -160,6 +160,28 @@ def _level_feet_interactive(joints, default, cfg_path) -> None:
         print()
 
 
+def _hold_default_until_interrupt(joints) -> None:
+    """策略退出后平滑回到 DEFAULT 站立姿态并保持力矩(不瘫倒);再按 Ctrl+C 卸力。"""
+    import time as _t
+    d = np.asarray(DEFAULT_JOINT_POS_VEC, dtype=np.float32)
+    print("\n" + "=" * 60)
+    print("  [exit] 平滑回到 DEFAULT 站立姿态并保持(不卸力)。")
+    print("         扶稳后再按一次 Ctrl+C 才卸力释放。")
+    print("=" * 60)
+    try:
+        joints.ramp_to_default(duration_s=2.0)
+        while True:
+            joints.send_position(d)
+            _t.sleep(0.02)
+    except KeyboardInterrupt:
+        print("\n[exit] 卸力释放。")
+    finally:
+        try:
+            joints.emergency_stop()
+        except Exception as e:
+            print(f"[exit] estop: {e!r}")
+
+
 def _build_real(args, cfg_path: Path):
     from deploy.io.real import JoystickCommand, RealIMU, UnitreeJointDriver
     imu = RealIMU(i2c_bus=args.i2c_bus,
@@ -201,6 +223,8 @@ def main() -> None:
                     help="键盘速度控制: w/s=vx±0.05(0~0.3) a/d=wz±0.1(±0.5) 空格=归零。")
     ap.add_argument("--no-wait", action="store_true",
                     help="跳过'保持 DEFAULT 等回车'的确认门,IMU 标定后直接进策略。")
+    ap.add_argument("--no-hold-on-exit", action="store_true",
+                    help="退出时立即卸力(默认: 回到 DEFAULT 站立保持,再 Ctrl+C 才卸力)。")
     ap.add_argument("--level-feet", action="store_true",
                     help="放地面后进入交互调平:按键微调左右踝零位到两脚平贴、松手能站,"
                          "回车再启动策略(q/a左踝 e/d右踝 s存盘)。")
@@ -331,12 +355,22 @@ def main() -> None:
         print("=" * 60)
         input(">>> 摆好扶稳后按回车,策略接管 <<< ")
 
+    hold_on_exit = not args.mock and not args.no_hold_on_exit
     print("[INFO] starting control loop. Ctrl+C to stop.")
     try:
-        ctrl.run(duration_s=args.duration)
+        ctrl.run(duration_s=args.duration, hold_on_exit=hold_on_exit)
     except KeyboardInterrupt:
         ctrl.stop()
     finally:
+        if hold_on_exit:
+            try:
+                _hold_default_until_interrupt(joints)
+            except Exception as e:
+                print(f"[exit] hold 失败,直接卸力: {e!r}")
+                try:
+                    joints.emergency_stop()
+                except Exception:
+                    pass
         for obj in (imu, cmd):
             close = getattr(obj, "close", None)
             if callable(close):
