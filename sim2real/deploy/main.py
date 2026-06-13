@@ -36,6 +36,7 @@ class StepRecord:
     base_ang_vel: np.ndarray = field(default_factory=lambda: np.zeros(3))
     proj_g: np.ndarray = field(default_factory=lambda: np.zeros(3))
     joint_pos: np.ndarray = field(default_factory=lambda: np.zeros(NUM_JOINTS))
+    joint_vel: np.ndarray = field(default_factory=lambda: np.zeros(NUM_JOINTS))
     joint_target: np.ndarray = field(default_factory=lambda: np.zeros(NUM_JOINTS))
     raw_action: np.ndarray = field(default_factory=lambda: np.zeros(ACTION_DIM))
     gait_phase: float = 0.0
@@ -149,6 +150,7 @@ class QminiController:
             base_ang_vel=np.asarray(ang_vel).copy(),
             proj_g=np.asarray(proj_g).copy(),
             joint_pos=joint_pos.copy(),
+            joint_vel=joint_vel.copy(),
             joint_target=np.asarray(target).copy(),
             raw_action=np.asarray(raw_action, dtype=np.float32).copy(),
             gait_phase=float(self.gait.phase),

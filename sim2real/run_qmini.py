@@ -54,6 +54,52 @@ def _print_debug_summary(ctrl) -> None:
     print("=" * 72)
 
 
+def _write_csv_log(ctrl, out_dir: Path) -> Path | None:
+    """把 history 落成一个 CSV(每步一行),便于事后画图/分析。"""
+    import csv
+    from datetime import datetime
+
+    hist = ctrl.history
+    if not hist:
+        print("[log] 没有记录可写(history 为空)")
+        return None
+    out_dir.mkdir(parents=True, exist_ok=True)
+    ts = datetime.now().strftime("%Y%m%d_%H%M%S")
+    path = out_dir / f"run_{ts}.csv"
+
+    j = list(JOINT_NAMES)
+    header = (
+        ["t", "vx_cmd", "vy_cmd", "wz_cmd"]
+        + ["lin_vx", "lin_vy", "lin_vz"]
+        + ["gyro_x", "gyro_y", "gyro_z"]
+        + ["projg_x", "projg_y", "projg_z"]
+        + [f"jpos_{n}" for n in j]
+        + [f"jvel_{n}" for n in j]
+        + [f"jtgt_{n}" for n in j]
+        + [f"act_{i}" for i in range(len(hist[0].raw_action))]
+        + ["gait_phase", "infer_ms"]
+    )
+    t0 = hist[0].t
+    with open(path, "w", newline="") as f:
+        w = csv.writer(f)
+        w.writerow(header)
+        for h in hist:
+            w.writerow(
+                [f"{h.t - t0:.4f}"]
+                + [f"{v:.4f}" for v in h.cmd]
+                + [f"{v:.4f}" for v in h.base_lin_vel]
+                + [f"{v:.4f}" for v in h.base_ang_vel]
+                + [f"{v:.4f}" for v in h.proj_g]
+                + [f"{v:.4f}" for v in h.joint_pos]
+                + [f"{v:.4f}" for v in h.joint_vel]
+                + [f"{v:.4f}" for v in h.joint_target]
+                + [f"{v:.4f}" for v in h.raw_action]
+                + [f"{h.gait_phase:.4f}", f"{h.inference_s * 1000:.2f}"]
+            )
+    print(f"[log] {len(hist)} 步已写入 {path}")
+    return path
+
+
 def _build_real(args, cfg_path: Path):
     from deploy.io.real import JoystickCommand, RealIMU, UnitreeJointDriver
     imu = RealIMU(i2c_bus=args.i2c_bus,
@@ -119,6 +165,8 @@ def main() -> None:
     ap.add_argument("--debug", action="store_true",
                     help="Record history and print per-joint cmd vs measured "
                          "amplitude summary at the end.")
+    ap.add_argument("--log", action="store_true",
+                    help="把每步 IMU/关节角速度/目标/动作写到 logs/run_<时间>.csv 便于分析。")
     ap.add_argument("--allow-no-calib", action="store_true",
                     help="DANGEROUS: run even if calibration.yaml not found.")
     ap.add_argument("--force-pose", action="store_true",
@@ -152,7 +200,7 @@ def main() -> None:
         onnx_path=onnx_path if onnx_path is not None else Path(args.onnx),
         imu=imu, joints=joints, cmd_source=cmd,
         calibration_yaml=cfg_path,
-        record_history=args.debug,
+        record_history=args.debug or args.log,
     )
 
     print("[INFO] checking initial joint pose...")
@@ -199,6 +247,11 @@ def main() -> None:
                 _print_debug_summary(ctrl)
             except Exception as e:
                 print(f"[debug] summary failed: {e!r}")
+        if args.log:
+            try:
+                _write_csv_log(ctrl, _SCRIPT_DIR / "logs")
+            except Exception as e:
+                print(f"[log] CSV 写入失败: {e!r}")
 
 
 if __name__ == "__main__":
