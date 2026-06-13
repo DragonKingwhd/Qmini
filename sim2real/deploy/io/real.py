@@ -347,13 +347,23 @@ class UnitreeJointDriver(JointDriver):
         self._parallel(motor_target, self._kp, self._kd)
         self._last_motor_cmd = motor_target.copy()
 
-    def emergency_stop(self) -> None:
-        """Drop torque on all 10 joints (kp=kd=0). Head motor not touched."""
-        for i in range(NUM_JOINTS):
-            try:
-                self._send_one(i, self._cached_motor_q[i], 0.0, 0.0)
-            except Exception as e:
-                print(f"[ESTOP] joint {JOINT_NAMES[i]}: {e!r}")
+    def emergency_stop(self, rounds: int = 6) -> None:
+        """Drop torque on all 10 joints (kp=kd=0). Head motor not touched.
+
+        Sends the release REPEATEDLY in bus-interleaved order with a turnaround
+        gap: a single back-to-back pass on the unterminated 485 collides and
+        the 2nd/3rd motor on a shared bus (e.g. knee/ankle on ttyUSB3) miss
+        their release frame → keep holding torque. Repeating + interleaving +
+        gap ensures every joint actually receives kp=kd=0."""
+        for _ in range(max(1, rounds)):
+            for i in self._send_order:
+                try:
+                    self._send_one(i, self._cached_motor_q[i], 0.0, 0.0)
+                except Exception:
+                    pass
+                if self._bus_gap > 0:
+                    time.sleep(self._bus_gap)
+            time.sleep(0.005)
 
 
 # ---- helper for the calibration step (separate from the driver) ----
