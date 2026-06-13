@@ -142,9 +142,11 @@ def main() -> None:
     ap.add_argument("--no-wait", action="store_true",
                     help="跳过'保持 DEFAULT 等回车'的确认门,IMU 标定后直接进策略。")
     ap.add_argument("--i2c-bus", type=int, default=1)
+    # 默认 = real.py RealIMU 已验证的安装朝向(GY-91 绕 y 轴 180°)。之前默认错填
+    # (1,1,1) 会覆盖掉 RealIMU 的 -1,1,-1 默认 → 重力符号反 → 必摔。
     ap.add_argument("--imu-perm", type=int, nargs=3, default=[0, 1, 2],
                     help="IMU 轴重排到 body(x前y左z上)。先用 debug/check_imu_frame.py 验。")
-    ap.add_argument("--imu-sign", type=float, nargs=3, default=[1.0, 1.0, 1.0],
+    ap.add_argument("--imu-sign", type=float, nargs=3, default=[-1.0, 1.0, -1.0],
                     help="IMU 各 body 轴乘 ±1(配合 --imu-perm)。")
     ap.add_argument("--bus-gap", type=float, default=0.002,
                     help="485 per-motor turnaround gap (s). 加了 120Ω 终端电阻后"
