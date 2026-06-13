@@ -49,6 +49,10 @@ def main() -> None:
     ap.add_argument("--kp-scale", type=float, default=0.4,
                     help="Gain scale (low = safe; raise once it tracks).")
     ap.add_argument("--bus-gap", type=float, default=0.0006)
+    ap.add_argument("--ankle-trim-l", type=float, default=0.0,
+                    help="左踝目标加偏(关节rad,调到左脚平贴。脚尖朝下→正负各试).")
+    ap.add_argument("--ankle-trim-r", type=float, default=0.0,
+                    help="右踝目标加偏(关节rad).")
     args = ap.parse_args()
 
     cfg = _resolve(args.config)
@@ -60,6 +64,13 @@ def main() -> None:
           f"hold={args.hold_secs}s  (NO policy/IMU/ONNX)")
 
     default = np.asarray(DEFAULT_JOINT_POS_VEC, dtype=np.float32)
+    # ankle_pitch_l=idx4, ankle_pitch_r=idx9。trim 只改保持目标,用来把脚调平;
+    # 找到值后再固化进 calibration motor_zero(见末尾提示)。
+    target = default.copy()
+    if args.ankle_trim_l or args.ankle_trim_r:
+        target[4] += args.ankle_trim_l
+        target[9] += args.ankle_trim_r
+        print(f"[trim] 左踝{args.ankle_trim_l:+.3f} 右踝{args.ankle_trim_r:+.3f} (关节rad)")
     joints = UnitreeJointDriver(zero_offset_yaml=str(cfg),
                                 bus_gap_s=args.bus_gap,
                                 kp_scale=args.kp_scale)
@@ -79,11 +90,11 @@ def main() -> None:
         t0 = time.perf_counter()
         last = 0.0
         while args.hold_secs <= 0 or (time.perf_counter() - t0 < args.hold_secs):
-            joints.send_position(default)
+            joints.send_position(target)
             t = time.perf_counter()
             if t - last > 0.5:
                 pos, _ = joints.read()
-                errs = np.abs(pos - default)
+                errs = np.abs(pos - target)
                 worst = int(np.argmax(errs))
                 print(f"  t={t - t0:5.1f}s  max|err|={errs.max():.3f} "
                       f"@{JOINT_NAMES[worst]}")
