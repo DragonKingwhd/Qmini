@@ -11,7 +11,10 @@ motor_q = motor_zero + sign × joint_q × 6.33        (real.py / 所有标定脚
 | `sign` | 接线/机械不变就**永远不变** | 双限位法一次搞定（或 calibrate_sign 逐关节看方向） |
 | `motor_zero_rad` | **每次断电作废**（GO 电机 q 相对上电位置） | 每次开机跑 stand_zero.py |
 
-结果都写在 `../config/calibration.yaml`。
+结果都写在 `../config/calibration.yaml` ——这是**每台机器自己的状态文件,不进 git**
+（否则每次 pull 都报脏/被 reset 冲掉零位）。首次部署:
+`cp config/calibration.example.yaml config/calibration.yaml`。
+只要电机不断电,`git pull` 后**不需要**重跑任何标定。
 
 ## 三个关键事实（踩过的坑）
 

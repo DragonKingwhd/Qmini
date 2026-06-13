@@ -1,0 +1,37 @@
+# 模板:首次部署时 cp calibration.example.yaml calibration.yaml
+# calibration.yaml 是每台机器自己的状态文件,不进 git(stand_zero 每次开机改写它,
+# 跟踪会导致每次 git pull 都报脏/被 reset 冲掉零位)。
+#
+# sign: 接线/机械不变就永远不变(下面是 2026-05-23 双限位法标定的实测值)
+# motor_zero_rad: 每次电机断电作废,开机跑 calib/stand_zero.py 重标;
+#                 下面的值只是某次会话的样本,供 stand_zero 首次吸附参考
+imu:
+  gyro_bias: null
+joints:
+  motor_zero_rad:
+  - 2.3346
+  - 13.422
+  - 13.804
+  - 10.8252
+  - -3.9899
+  - 0.5961
+  - -3.8123
+  - -10.3342
+  - -7.2212
+  - -6.4231
+  sign:
+  - -1.0
+  - -1.0
+  - 1.0
+  - -1.0
+  - -1.0
+  - -1.0
+  - 1.0
+  - 1.0
+  - -1.0
+  - 1.0
+  offset: null
+head:
+  port: /dev/ttyUSB0
+  motor_id: 0
+  hold_motor_rad: 2.497

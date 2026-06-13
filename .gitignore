@@ -3,6 +3,8 @@ __pycache__/
 *.pyo
 .pytest_cache/
 *.yaml.bak
+# 每台机器自己的标定状态(stand_zero 每次开机改写),模板见 calibration.example.yaml
+sim2real/config/calibration.yaml
 .venv/
 venv/
 .idea/
