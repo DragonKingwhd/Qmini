@@ -9,5 +9,6 @@
 | `identify_axes_manual.py` | 手扳关节识别轴向（零力矩，看 q 变化方向） | ✓ |
 | `pid_sweep.py` | kp/kd 扫参找安全增益。已得结论：kp=1.20 kd=0.10；**kd≥0.5 必振荡过流** | ✓ |
 | `test_imu_gy91.py` | GY-91（MPU9250）I2C 读数自检 | ✓ |
+| `check_imu_frame.py` | 实时看 body-frame proj_g/gyro，倾斜机器人验证 IMU 轴向/符号（跑策略前必做：错了就会平衡失败往一边倒） | ✓ |
 
 带硬件的脚本都默认机器人**悬空/台架**，异常立刻 Ctrl+C（都会卸力矩退出）。

@@ -473,12 +473,18 @@ class RealIMU(IMUDriver):
 
         ang_vel_b = self._to_body(gyro_dps_raw) * _DEG2RAD - self._gyro_bias
 
+        # Projected gravity = gravity DIRECTION (points DOWN) in body frame.
+        # Training: _GRAVITY_W=(0,0,-1) → upright gravity_b=(0,0,-1).
+        # An accelerometer at rest measures specific force (points UP, +g) =
+        # the NEGATIVE of the gravity direction. So negate: this is physics,
+        # independent of how the IMU is mounted. (Pre-fix bug: returned
+        # +accel = (0,0,+1) upright → attitude sense inverted → fell backward.)
         accel_b = self._to_body(accel_g_raw)
         n = float(np.linalg.norm(accel_b))
         if n < 1e-6:
-            proj_g_b = np.array([0.0, 0.0, 1.0], dtype=np.float32)
+            proj_g_b = np.array([0.0, 0.0, -1.0], dtype=np.float32)
         else:
-            proj_g_b = (accel_b / n).astype(np.float32)
+            proj_g_b = (-accel_b / n).astype(np.float32)
 
         # Placeholder: training had Unoise on this channel, so 0 is acceptable.
         # Swap in a state estimator (IMU + leg odometry) later if drift hurts.

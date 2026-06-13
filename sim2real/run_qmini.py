@@ -56,7 +56,9 @@ def _print_debug_summary(ctrl) -> None:
 
 def _build_real(args, cfg_path: Path):
     from deploy.io.real import JoystickCommand, RealIMU, UnitreeJointDriver
-    imu = RealIMU(i2c_bus=args.i2c_bus)
+    imu = RealIMU(i2c_bus=args.i2c_bus,
+                  axis_perm=tuple(args.imu_perm),
+                  axis_sign=tuple(args.imu_sign))
     joints = UnitreeJointDriver(
         zero_offset_yaml=str(cfg_path) if cfg_path is not None else None,
         bus_gap_s=args.bus_gap,
@@ -94,6 +96,10 @@ def main() -> None:
     ap.add_argument("--no-wait", action="store_true",
                     help="跳过'保持 DEFAULT 等回车'的确认门,IMU 标定后直接进策略。")
     ap.add_argument("--i2c-bus", type=int, default=1)
+    ap.add_argument("--imu-perm", type=int, nargs=3, default=[0, 1, 2],
+                    help="IMU 轴重排到 body(x前y左z上)。先用 debug/check_imu_frame.py 验。")
+    ap.add_argument("--imu-sign", type=float, nargs=3, default=[1.0, 1.0, 1.0],
+                    help="IMU 各 body 轴乘 ±1(配合 --imu-perm)。")
     ap.add_argument("--bus-gap", type=float, default=0.002,
                     help="485 per-motor turnaround gap (s). 加了 120Ω 终端电阻后"
                          "可试 0.0006 换余量。")
