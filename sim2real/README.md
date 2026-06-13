@@ -43,8 +43,13 @@ cd ~/Desktop/Qmini
 # 1. 机器人放台架,两腿伸直竖直、左右平行、脚尖朝前、脚掌放平,上电
 python3 sim2real/calib/stand_zero.py            # 2. 一键重标零位(零力矩,安全)
 python3 sim2real/debug/goto_default.py --kp-scale 0.4   # 3. 低增益验证全关节跟到 DEFAULT
-python3 sim2real/run_qmini.py --constant-cmd --vx 0     # 4. 不断电,直接跑策略
+python3 sim2real/run_qmini.py --keyboard                # 4. 不断电,直接跑策略(键盘控制)
 ```
+
+第 4 步默认有**确认门**:ramp 到 DEFAULT + IMU 标定后,电机全刚度锁住等你回车——
+此时把机器人从台架拿下来放地面扶稳,回车策略才接管(跳过加 `--no-wait`)。
+键盘: `w/s`=加减速(0~0.3 m/s) `a/d`=左/右转(±0.5 rad/s) `空格`=原地踏步。
+训练命令分布 vx∈[0.1,0.3]、vy≡0、wz∈[±0.5],别指望它后退或侧移。
 
 sign / 软限位 / PD 增益不随断电丢失，只有 `motor_zero_rad` 需要每次重标。
 首次标定或机械动过 → 用 `calib/capture_zero.py` 双限位法（见 `calib/readme.md`）。
@@ -70,7 +75,8 @@ sim2real/
 │   └── io/
 │       ├── interfaces.py      抽象驱动接口(IMU / Joint / CommandSource)
 │       ├── mock.py            假驱动(无硬件端到端测试用)
-│       └── real.py            真驱动(GO-M8010-6 ×10 / GY-91 IMU / 手柄)
+│       ├── real.py            真驱动(GO-M8010-6 ×10 / GY-91 IMU / 手柄)
+│       └── keyboard.py        键盘速度命令源(--keyboard, w/s/a/d/空格)
 ├── calib/                     标定工作流 → 见 calib/readme.md
 │   ├── stand_zero.py          ★每次开机:台架直腿一键零位
 │   ├── capture_zero.py        首次/机械动过:双限位法解 sign+zero

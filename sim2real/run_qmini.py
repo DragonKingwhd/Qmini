@@ -62,7 +62,10 @@ def _build_real(args, cfg_path: Path):
         bus_gap_s=args.bus_gap,
         kp_scale=args.kp_scale,
     )
-    if args.constant_cmd:
+    if args.keyboard:
+        from deploy.io.keyboard import KeyboardCommand
+        cmd = KeyboardCommand()
+    elif args.constant_cmd:
         from deploy.io.mock import ConstantCommand
         cmd = ConstantCommand(vx=args.vx, vy=args.vy, wz=args.wz)
     else:
@@ -86,6 +89,10 @@ def main() -> None:
                     help="Use mock drivers (desktop dry-run).")
     ap.add_argument("--constant-cmd", action="store_true",
                     help="Use --vx/--vy/--wz constant velocity instead of joystick.")
+    ap.add_argument("--keyboard", action="store_true",
+                    help="键盘速度控制: w/s=vx±0.05(0~0.3) a/d=wz±0.1(±0.5) 空格=归零。")
+    ap.add_argument("--no-wait", action="store_true",
+                    help="跳过'保持 DEFAULT 等回车'的确认门,IMU 标定后直接进策略。")
     ap.add_argument("--i2c-bus", type=int, default=1)
     ap.add_argument("--bus-gap", type=float, default=0.002,
                     help="485 per-motor turnaround gap (s). 加了 120Ω 终端电阻后"
@@ -161,6 +168,15 @@ def main() -> None:
     if not args.skip_imu_calib:
         print("[INFO] hold robot still for IMU gyro bias calibration (3s)...")
         ctrl.calibrate_imu(duration_s=3.0)
+
+    if not args.mock and not args.no_wait:
+        print("\n" + "=" * 60)
+        print("  电机正以全 PD 刚度保持 DEFAULT(板载闭环,等待期间一直锁住)。")
+        print("  现在可以把机器人从台架拿下来放到地面、扶稳。")
+        if args.keyboard:
+            print("  键盘: w/s=加减速(0~0.3)  a/d=左/右转(±0.5)  空格=原地踏步")
+        print("=" * 60)
+        input(">>> 摆好扶稳后按回车,策略接管 <<< ")
 
     print("[INFO] starting control loop. Ctrl+C to stop.")
     try:
