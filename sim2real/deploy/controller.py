@@ -34,7 +34,17 @@ from .reference_gait import ReferenceGait
 
 class ONNXPolicy:
     def __init__(self, onnx_path: str | Path):
-        self.session = ort.InferenceSession(str(onnx_path), providers=["CPUExecutionProvider"])
+        # Single-threaded, no spinning: ORT's default thread pool (one spinning
+        # worker per core) starves the per-bus 485 I/O threads on the Pi 4 at
+        # 50 Hz — replies miss their recv window, frames desync ("received 3
+        # bytes, but not 16"), loop collapses to ~14 Hz. The 44→10 MLP runs in
+        # ~0.1 ms on one core; a thread pool buys nothing here.
+        opts = ort.SessionOptions()
+        opts.intra_op_num_threads = 1
+        opts.inter_op_num_threads = 1
+        opts.add_session_config_entry("session.intra_op.allow_spinning", "0")
+        self.session = ort.InferenceSession(
+            str(onnx_path), sess_options=opts, providers=["CPUExecutionProvider"])
         self.input_name = self.session.get_inputs()[0].name
         self.output_name = self.session.get_outputs()[0].name
 
