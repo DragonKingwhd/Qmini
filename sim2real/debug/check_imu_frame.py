@@ -37,9 +37,11 @@ def main() -> None:
     import argparse
     ap = argparse.ArgumentParser()
     ap.add_argument("--i2c-bus", type=int, default=1)
+    # 默认 = real.py RealIMU 的已验证默认(GY-91 绕 y 轴 180° 安装),
+    # 所以"不带参数"看到的就是 run_qmini 实际用的。要试别的映射再覆盖。
     ap.add_argument("--perm", type=int, nargs=3, default=[0, 1, 2],
                     help="axis_perm(测试用): 把原始轴重排到 body 轴")
-    ap.add_argument("--sign", type=float, nargs=3, default=[1.0, 1.0, 1.0],
+    ap.add_argument("--sign", type=float, nargs=3, default=[-1.0, 1.0, -1.0],
                     help="axis_sign(测试用): 各 body 轴乘 ±1")
     args = ap.parse_args()
 
