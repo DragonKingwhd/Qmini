@@ -158,6 +158,8 @@ def main() -> None:
     ap.add_argument("--duration", type=float, default=None,
                     help="Stop after N seconds (default: run until Ctrl+C)")
     ap.add_argument("--skip-imu-calib", action="store_true")
+    ap.add_argument("--skip-imu-check", action="store_true",
+                    help="跳过启动时重力方向自检(仅当确知机器人大幅倾斜启动时)。")
     ap.add_argument("--no-ramp", action="store_true",
                     help="Skip the soft-start ramp to DEFAULT (NOT recommended).")
     ap.add_argument("--ramp-secs", type=float, default=3.0,
@@ -202,6 +204,26 @@ def main() -> None:
         calibration_yaml=cfg_path,
         record_history=args.debug or args.log,
     )
+
+    if not args.mock and not args.skip_imu_check:
+        import time as _time
+        gs = []
+        for _ in range(20):
+            _l, _a, _g = imu.read()
+            gs.append(np.asarray(_g, dtype=np.float32))
+            _time.sleep(0.01)
+        g = np.mean(gs, axis=0)
+        print(f"[INFO] IMU 重力自检: proj_g={np.round(g, 2).tolist()}")
+        if g[2] > -0.3:
+            sys.exit(
+                "\n" + "!" * 64 +
+                f"\n[FATAL] IMU 重力自检失败: proj_g_z={g[2]:+.2f},站立时应≈-1(指向下)。"
+                "\n  z 不为负 = 重力符号/轴向反了 → 姿态反馈反向 → 必摔(前扑/后仰)。"
+                "\n  99% 原因: 跑的是没更新的旧代码(默认还是 1,1,1)。"
+                "\n  修: cd ~/Desktop/Qmini && git pull  再跑(默认已是 -1,1,-1)。"
+                "\n  验轴向: python3 sim2real/debug/check_imu_frame.py"
+                "\n  确知机器人当前大幅倾斜(非竖直)才跳过: --skip-imu-check。\n"
+                + "!" * 64)
 
     print("[INFO] checking initial joint pose...")
     bad = ctrl.check_pose()
