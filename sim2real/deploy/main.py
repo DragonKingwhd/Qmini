@@ -52,7 +52,15 @@ class QminiController:
         cmd_source: CommandSource,
         calibration_yaml: str | Path | None = None,
         record_history: bool = False,
+        linvel_mode: str = "zero",
     ) -> None:
+        # base_lin_vel(观测前3维)在真机上没有传感器直接给。两种代理:
+        #   "zero" — 恒 0(IMU 占位)。命令 vx>0 时与真值差一个常数 → 策略以为
+        #            没跟上速度,持续猛蹬 → 越快越后仰(已实测 vx 0/0.12/0.18 存活
+        #            20/8/2s 单调)。
+        #   "cmd"  — 喂命令值 [vx,vy,0]。速度误差恒≈0,策略不再乱蹬,只靠姿态平衡;
+        #            走的速度由参考步态+残差决定(不精确但稳)。无估计器时的常用招。
+        self._linvel_mode = str(linvel_mode)
         # ONNX export from rsl_rl prepends Sub(mean)/Div(std) — feed RAW obs.
         self.policy = ONNXPolicy(onnx_path)
         self.obs_builder = ObservationBuilder()
@@ -106,6 +114,10 @@ class QminiController:
         joint_vel = np.asarray(joint_vel, dtype=np.float32)
 
         cmd = np.asarray(self.cmd_source.read(), dtype=np.float32).reshape(3)
+
+        # base_lin_vel 代理: "cmd" 模式喂 [vx,vy,0](见 __init__),闭合速度环。
+        if self._linvel_mode == "cmd":
+            lin_vel = np.array([cmd[0], cmd[1], 0.0], dtype=np.float32)
 
         # 2. build observation. Uses gait phase from BEFORE this step's
         #    advance, matching training: in qmini_env_cfg.py the obs term
