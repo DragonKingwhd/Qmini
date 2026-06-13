@@ -53,6 +53,8 @@ class QminiController:
         calibration_yaml: str | Path | None = None,
         record_history: bool = False,
         linvel_mode: str = "zero",
+        proj_g_filter: str = "comp",
+        proj_g_alpha: float = 0.02,
     ) -> None:
         # base_lin_vel(观测前3维)在真机上没有传感器直接给。两种代理:
         #   "zero" — 恒 0(IMU 占位)。命令 vx>0 时与真值差一个常数 → 策略以为
@@ -61,6 +63,16 @@ class QminiController:
         #   "cmd"  — 喂命令值 [vx,vy,0]。速度误差恒≈0,策略不再乱蹬,只靠姿态平衡;
         #            走的速度由参考步态+残差决定(不精确但稳)。无估计器时的常用招。
         self._linvel_mode = str(linvel_mode)
+        # 重力方向来源:
+        #   "comp" — 互补滤波(陀螺传播+加速度计慢纠偏)。裸加速度计 proj_g 在踏步
+        #            时被落脚运动加速度周期污染(实测竖直段 ±8° 假俯仰)→ 策略据假
+        #            倾角周期纠正 → 俯仰发散前后倒。陀螺免线加速度,主导短期;加速度
+        #            计只慢速纠漂。逼近训练侧 quat 算的纯重力方向。
+        #   "raw"  — 直接用 IMU 的加速度计 proj_g(旧行为,对照用)。
+        self._proj_g_filter = str(proj_g_filter)
+        self._proj_g_alpha = float(proj_g_alpha)
+        self._g_filt: np.ndarray | None = None
+        self._last_step_t: float | None = None
         # ONNX export from rsl_rl prepends Sub(mean)/Div(std) — feed RAW obs.
         self.policy = ONNXPolicy(onnx_path)
         self.obs_builder = ObservationBuilder()
@@ -108,6 +120,24 @@ class QminiController:
         # 1. read sensors / command
         lin_vel, ang_vel, proj_g = self.imu.read()
         ang_vel = np.asarray(ang_vel, dtype=np.float32) - self._calib.imu_gyro_bias
+
+        # 重力方向互补滤波(抑制踏步运动加速度对 proj_g 的污染)。
+        # 世界系恒定的重力向量在 body 系按 ġ = -ω×g 演化 → 陀螺传播;再用加速度计
+        # 测得方向慢速纠偏(alpha 小,主要靠陀螺,只防长期漂移)。
+        if self._proj_g_filter == "comp":
+            g_meas = np.asarray(proj_g, dtype=np.float32)
+            now = time.perf_counter()
+            dt = (CONTROL_DT if self._last_step_t is None
+                  else min(0.05, max(0.005, now - self._last_step_t)))
+            self._last_step_t = now
+            if self._g_filt is None:
+                self._g_filt = g_meas.copy()
+            else:
+                g = self._g_filt - np.cross(ang_vel, self._g_filt) * dt
+                g = g + self._proj_g_alpha * (g_meas - g)
+                n = float(np.linalg.norm(g))
+                self._g_filt = (g / n if n > 1e-6 else g).astype(np.float32)
+            proj_g = self._g_filt
 
         joint_pos, joint_vel = self.joints.read()
         joint_pos = np.asarray(joint_pos, dtype=np.float32) - self._calib.joint_offset

@@ -159,6 +159,9 @@ def main() -> None:
     ap.add_argument("--wz", type=float, default=0.0)
     ap.add_argument("--duration", type=float, default=None,
                     help="Stop after N seconds (default: run until Ctrl+C)")
+    ap.add_argument("--projg-filter", choices=["comp", "raw"], default="comp",
+                    help="重力方向: comp=互补滤波(陀螺+加速度计融合,默认,抑制踏步污染)"
+                         " / raw=裸加速度计(旧,踏步时±8°假俯仰→前后倒)。")
     ap.add_argument("--linvel-mode", choices=["zero", "cmd"], default="zero",
                     help="机身速度观测来源: zero=恒0(默认) / cmd=喂命令值。"
                          "2026-06-13 实测 cmd 反而更快后倒(1.6s vs 9.6s),故默认 zero;"
@@ -210,6 +213,7 @@ def main() -> None:
         calibration_yaml=cfg_path,
         record_history=args.debug or args.log,
         linvel_mode=args.linvel_mode,
+        proj_g_filter=args.projg_filter,
     )
 
     if not args.mock and not args.skip_imu_check:
