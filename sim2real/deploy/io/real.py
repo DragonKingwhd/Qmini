@@ -117,8 +117,16 @@ class UnitreeJointDriver(JointDriver):
         self,
         mapping: Dict[str, MotorMap] | None = None,
         zero_offset_yaml: str | Path | None = None,
-        max_target_step_rad: float = 0.30,
-        bus_gap_s: float = 0.0006,
+        # 0.15 rad/tick (= 7.5 rad/s @50Hz): generous for walking (gait peak
+        # ~2 rad/s) but caps the snap when comms drop out for a few ticks and
+        # the commanded target has marched ahead of the stalled motor.
+        max_target_step_rad: float = 0.15,
+        # 2 ms turnaround per motor: this unterminated 485 bus (no 120Ω yet)
+        # desyncs at run_qmini's 2-transactions-per-tick rate with 0.6 ms —
+        # late reply bytes corrupt the next frame ("received 3 bytes, not
+        # 16"). 0.0006 was only ever clean at goto_default's 1-txn rate.
+        # Worst bus: 3 motors × ~2.2 ms × 2 txn ≈ 13 ms — still fits 20 ms.
+        bus_gap_s: float = 0.002,
         kp_scale: float = 1.0,
     ) -> None:
         if mapping is None:

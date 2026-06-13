@@ -59,6 +59,7 @@ def _build_real(args, cfg_path: Path):
     imu = RealIMU(i2c_bus=args.i2c_bus)
     joints = UnitreeJointDriver(
         zero_offset_yaml=str(cfg_path) if cfg_path is not None else None,
+        bus_gap_s=args.bus_gap,
     )
     if args.constant_cmd:
         from deploy.io.mock import ConstantCommand
@@ -85,6 +86,9 @@ def main() -> None:
     ap.add_argument("--constant-cmd", action="store_true",
                     help="Use --vx/--vy/--wz constant velocity instead of joystick.")
     ap.add_argument("--i2c-bus", type=int, default=1)
+    ap.add_argument("--bus-gap", type=float, default=0.002,
+                    help="485 per-motor turnaround gap (s). 加了 120Ω 终端电阻后"
+                         "可试 0.0006 换余量。")
     ap.add_argument("--vx", type=float, default=0.0)
     ap.add_argument("--vy", type=float, default=0.0)
     ap.add_argument("--wz", type=float, default=0.0)
